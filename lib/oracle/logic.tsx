@@ -604,10 +604,17 @@ export default class OracleLogic extends React.Component<Props, any> {
         del:()=>this.upd(e=>({...e,custom:e.custom.filter(x=>'c'+x.cid!==n.id),naCena:e.naCena.filter(x=>x!==n.id)}))};}),
       npcForm:s.npcForm, n_nome:ev=>this.setState({npcForm:{...s.npcForm,nome:ev.target.value}}), n_papel:ev=>this.setState({npcForm:{...s.npcForm,papel:ev.target.value}}), n_desc:ev=>this.setState({npcForm:{...s.npcForm,desc:ev.target.value}}),
       addNpc:()=>{ const f=s.npcForm; if(!f.nome.trim()) return; this.upd(e=>({...e,custom:[...(e.custom||[]),{cid:uid(),n:f.nome.trim(),p:f.papel.trim()||'Desconhecido',d:f.desc.trim(),r:d.cena||''}]})); this.setState({npcForm:{nome:'',papel:'',desc:''}}); },
-      genNpc:async()=>{ if(!window.claude||this.state.busy) return; this.setState({busy:true});
-        try{ const txt=await window.claude.complete({system:`Crie um Personagem do Diretor original para ${RR.titulo}, coerente com o livro. Região: ${d.cena||'à sua escolha'}. Trecho do livro:\n${(LL.textos[d.cena]||LL.geral).slice(0,6000)}\nTodo PdD tem quatro linhas: virtude, pecado, quer, teme. Responda SOMENTE JSON: {"n":"nome","p":"papel, idade","d":"duas frases","v":"","pe":"","q":"","t":""}`,
-            messages:[{role:'user',content:'Novo personagem, diferente destes: '+npcs.map(n=>n.n).slice(-40).join(', ')}],max_tokens:500});
-          const j=JSON.parse(txt.slice(txt.indexOf('{'),txt.lastIndexOf('}')+1)); this.upd(e=>({...e,custom:[...(e.custom||[]),{cid:uid(),...j,r:d.cena||''}]})); this.setState({npcReg:'__meus'});
+      genNpc:async()=>{ if(this.state.busy) return; this.setState({busy:true});
+        try{
+          const res=await fetch('/api/npc',{method:'POST',headers:{'content-type':'application/json'},
+            body:JSON.stringify({era, cena:d.cena||'', evitar:npcs.map(n=>n.n).slice(-40),
+              prefs:{modeloIA:this.props.modeloIA||'haiku'}})});
+          if(res.status===429){ const q=await res.json().catch(()=>({}));
+            this.addLog({k:'mech',who:'Arquivo',text:q.message||'Os arquivos da cidade fecham por hoje.'}); }
+          else if(!res.ok){ throw new Error('npc '+res.status); }
+          else { const j=await res.json();
+            this.upd(e=>({...e,custom:[...(e.custom||[]),{cid:uid(),...j.npc,r:d.cena||''}]}));
+            this.setState({npcReg:'__meus'}); }
         }catch(err){ this.addLog({k:'mech',who:'Erro',text:'Não foi possível gerar o NPC.'}); }
         this.setState({busy:false}); },
       // cidade

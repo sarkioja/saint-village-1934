@@ -1,0 +1,336 @@
+/*
+ * Telas que NAO existem no artifact original (entrar, cadastrar, perfil, lista
+ * de cronicas, painel do seculo). Como nao ha' o que comparar pixel a pixel,
+ * elas sao construidas com os MESMOS tokens do jogo: as familias tipograficas
+ * reais, a paleta --sv-* e a linguagem de "dossie confidencial" da tela de
+ * selecao de era (cartao com borda superior destacada, selo vermelho rotacionado,
+ * caixa alta com letter-spacing largo).
+ *
+ * As variaveis --sv-* so' existem quando uma era esta' ativa (applyTheme as
+ * injeta no :root). Fora do jogo usamos os mesmos valores da era 1934 como
+ * padrao, via fallback em cada var().
+ */
+
+.sv-shell {
+  min-height: 100vh;
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    var(--sv-bg1, #1d1a16) 0%,
+    var(--sv-bg, #0b0a09) 60%,
+    var(--sv-bg2, #050504) 100%
+  );
+  font-family: 'Oswald', sans-serif;
+  color: var(--sv-ink, #f2efe8);
+  display: flex;
+  flex-direction: column;
+}
+
+.sv-topbar {
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 20px 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+}
+
+.sv-wordmark {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--sv-ink, #f2efe8);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sv-wordmark span {
+  font-family: 'Poiret One', sans-serif;
+  font-size: 26px;
+  letter-spacing: 0.08em;
+  color: var(--sv-accent2, #d6d1c6);
+  margin-left: 10px;
+}
+
+.sv-stamp {
+  border: 1.5px solid #b0281f;
+  color: #c8372b;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transform: rotate(-3deg);
+  white-space: nowrap;
+}
+
+.sv-main {
+  flex: 1;
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 20px 80px;
+}
+
+.sv-narrow {
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.sv-kicker {
+  font-size: 12px;
+  letter-spacing: 0.55em;
+  padding-left: 0.55em;
+  color: var(--sv-accent2, #d6d1c6);
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.sv-h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(38px, 7vw, 62px);
+  line-height: 0.95;
+  letter-spacing: 0.015em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+  color: var(--sv-ink, #f7f5f0);
+}
+
+.sv-lede {
+  font-family: 'Special Elite', monospace;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--sv-dim, #a8a399);
+  text-wrap: pretty;
+  margin: 0 0 28px;
+}
+
+.sv-rule {
+  width: 96px;
+  height: 1px;
+  background: var(--sv-accent2, #d6d1c6);
+  margin: 24px 0;
+}
+
+/* ---- formularios ---- */
+
+.sv-field {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.sv-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--sv-dim, #9b9488);
+  margin-bottom: 7px;
+}
+
+.sv-input {
+  width: 100%;
+  background: var(--sv-panel2, #11100e);
+  border: 1px solid var(--sv-line2, #3a3631);
+  color: var(--sv-ink, #f2efe8);
+  padding: 12px 14px;
+  font-family: 'Special Elite', monospace;
+  font-size: 15px;
+}
+
+.sv-input:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 0;
+}
+
+.sv-btn {
+  display: inline-block;
+  background: var(--sv-ink, #ebe5d6);
+  color: var(--sv-bg, #0b0a09);
+  border: none;
+  padding: 13px 26px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.sv-btn:hover {
+  background: var(--sv-accent2, #d6d1c6);
+}
+
+.sv-btn-ghost {
+  background: none;
+  border: 1px solid var(--sv-ink, #ebe5d6);
+  color: var(--sv-ink, #ebe5d6);
+  padding: 11px 20px;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.sv-btn-ghost:hover {
+  background: var(--sv-ink, #ebe5d6);
+  color: var(--sv-bg, #0b0a09);
+}
+
+.sv-btn-danger {
+  background: none;
+  border: 1px solid #7d2a22;
+  color: #c8372b;
+  padding: 8px 14px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.sv-btn-danger:hover {
+  background: #7d2a22;
+  color: #f2efe8;
+}
+
+.sv-error {
+  border-left: 2px solid #b0281f;
+  background: rgba(176, 40, 31, 0.1);
+  color: #e39a8f;
+  padding: 11px 14px;
+  font-family: 'Special Elite', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.sv-note {
+  font-family: 'Special Elite', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--sv-dim2, #7f7a72);
+  margin-top: 22px;
+}
+
+.sv-note a,
+.sv-link {
+  color: var(--sv-accent2, #d6d1c6);
+}
+
+/* ---- cartoes de cronica (linguagem da tela de selecao de era) ---- */
+
+.sv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 2px;
+}
+
+.sv-card {
+  background: rgba(14, 13, 12, 0.92);
+  border: 1px solid var(--sv-line, #2a2622);
+  border-top: 2px solid var(--sv-accent2, #d9d4c7);
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.25s, border-color 0.25s;
+}
+
+.sv-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--sv-accent2, #d6d1c6);
+}
+
+.sv-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sv-dim, #9b9488);
+}
+
+.sv-card-era {
+  font-family: 'Poiret One', sans-serif;
+  font-size: 52px;
+  line-height: 0.95;
+  letter-spacing: 0.04em;
+  color: var(--sv-accent2, #d6d1c6);
+}
+
+.sv-card-name {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 23px;
+  letter-spacing: 0.05em;
+  line-height: 1.05;
+  color: var(--sv-ink, #f2efe8);
+}
+
+.sv-card-meta {
+  font-family: 'Special Elite', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--sv-dim, #cfcac0);
+  text-wrap: pretty;
+}
+
+.sv-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sv-dim2, #7f7a72);
+  margin-top: 2px;
+}
+
+.sv-stats b {
+  color: var(--sv-ink2, #d8d3c8);
+  font-weight: 600;
+}
+
+.sv-card-actions {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sv-empty {
+  border: 1px dashed var(--sv-line2, #3a3631);
+  padding: 40px 24px;
+  text-align: center;
+  font-family: 'Special Elite', monospace;
+  color: var(--sv-dim, #9b9488);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.sv-section-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 44px 0 16px;
+  color: var(--sv-ink, #f2efe8);
+}
+
+.sv-footer {
+  text-align: center;
+  padding: 20px;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--sv-dim2, #77726a);
+  text-transform: uppercase;
+}

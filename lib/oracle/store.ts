@@ -63,44 +63,76 @@ export class RemoteStore implements Store {
   private pending: SaveShape | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inFlight = false;
+  private rev: number;
+  private conflict = false;
 
   constructor(
     private campaignId: string,
     private initial: SaveShape | null,
-    private onError?: (e: unknown) => void,
+    rev: number,
     private debounceMs = 700,
-  ) {}
+  ) {
+    this.rev = rev;
+    if (typeof window !== 'undefined') {
+      // Uma jogada feita no ultimo instante nao pode se perder ao sair.
+      window.addEventListener('pagehide', () => void this.flush());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') void this.flush();
+      });
+    }
+  }
 
   read(): SaveShape | null {
     return this.initial;
   }
 
   write(s: SaveShape): void {
+    if (this.conflict) return; // outra aba assumiu; nao sobrescreve
     this.pending = s;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.flush(), this.debounceMs);
   }
 
-  /** Forca o envio do que esta' pendente (usar ao sair da pagina). */
+  /** Envia o que esta' pendente. Agrupa porque o jogo grava a cada setState. */
   async flush(): Promise<void> {
-    if (this.inFlight || !this.pending) return;
+    if (this.inFlight || !this.pending || this.conflict) return;
     const body = this.pending;
     this.pending = null;
     this.inFlight = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
     try {
       const res = await fetch(`/api/campaigns/${encodeURIComponent(this.campaignId)}`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, rev: this.rev }),
       });
+
+      if (res.status === 409) {
+        // Outra aba (ou outro dispositivo) gravou depois de nos. Parar de
+        // escrever e' melhor que sobrescrever o progresso de la'.
+        this.conflict = true;
+        if (typeof window !== 'undefined') {
+          window.alert(
+            'Esta crônica foi gravada em outra aba. Recarregue a página para continuar de onde ela parou — ' +
+              'o que você fez aqui depois disso não foi salvo.',
+          );
+        }
+        return;
+      }
       if (!res.ok) throw new Error('save ' + res.status);
-    } catch (e) {
-      // Devolve para a fila para nao perder a jogada.
+
+      const j = await res.json().catch(() => null);
+      if (j && typeof j.rev === 'number') this.rev = j.rev;
+    } catch {
+      // Falha de rede: devolve para a fila para nao perder a jogada.
       if (!this.pending) this.pending = body;
-      this.onError?.(e);
+      if (!this.timer) this.timer = setTimeout(() => void this.flush(), this.debounceMs * 3);
     } finally {
       this.inFlight = false;
-      if (this.pending && !this.timer) {
+      if (this.pending && !this.timer && !this.conflict) {
         this.timer = setTimeout(() => void this.flush(), this.debounceMs);
       }
     }

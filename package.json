@@ -9,7 +9,8 @@
     "gen": "node tools/extract-css.mjs && node tools/transpile-template.mjs && node tools/split-data.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "verify:pixel": "node tests/pixel/run.mjs"
+    "verify:pixel": "node tests/pixel/run.mjs",
+    "migrate": "node tools/migrate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

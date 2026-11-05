@@ -220,7 +220,35 @@ for (const [what, needle] of [
   if (!head.includes(needle)) throw new Error('substituicao falhou: ' + what);
 }
 
-const out = PRELUDE + HELPERS + '\n' + head + '\n' + NARRATE + '\n' + TAIL.replace(/\}\s*$/, '') + RENDER + '}\n';
+// genNpc() esta' na fatia TAIL e tambem falava com o runtime do artifact. Pior:
+// usava LL.textos, que agora so' existe no servidor. Vai para /api/npc.
+const GEN_NPC_OLD = slice(548, 553);
+if (!/genNpc:async\(\)=>\{ if\(!window\.claude/.test(GEN_NPC_OLD)) {
+  throw new Error('bloco genNpc nao esta nas linhas 548-553 — source/component.js mudou?');
+}
+
+const GEN_NPC_NEW = `      genNpc:async()=>{ if(this.state.busy) return; this.setState({busy:true});
+        try{
+          const res=await fetch('/api/npc',{method:'POST',headers:{'content-type':'application/json'},
+            body:JSON.stringify({era, cena:d.cena||'', evitar:npcs.map(n=>n.n).slice(-40),
+              prefs:{modeloIA:this.props.modeloIA||'haiku'}})});
+          if(res.status===429){ const q=await res.json().catch(()=>({}));
+            this.addLog({k:'mech',who:'Arquivo',text:q.message||'Os arquivos da cidade fecham por hoje.'}); }
+          else if(!res.ok){ throw new Error('npc '+res.status); }
+          else { const j=await res.json();
+            this.upd(e=>({...e,custom:[...(e.custom||[]),{cid:uid(),...j.npc,r:d.cena||''}]}));
+            this.setState({npcReg:'__meus'}); }
+        }catch(err){ this.addLog({k:'mech',who:'Erro',text:'Não foi possível gerar o NPC.'}); }
+        this.setState({busy:false}); },`;
+
+const tailPorted = TAIL.replace(GEN_NPC_OLD, GEN_NPC_NEW);
+if (tailPorted === TAIL) throw new Error('substituicao do genNpc nao aplicou');
+if (/window\.claude/.test(tailPorted)) {
+  throw new Error('sobrou window.claude no corpo portado');
+}
+
+const out =
+  PRELUDE + HELPERS + '\n' + head + '\n' + NARRATE + '\n' + tailPorted.replace(/\}\s*$/, '') + RENDER + '}\n';
 
 writeFileSync('lib/oracle/logic.tsx', out);
 

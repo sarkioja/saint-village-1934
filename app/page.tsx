@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import OracleLogic from '@/lib/oracle/logic';
 import { LocalStore, type SaveShape } from '@/lib/oracle/store';
+import AccountChip from '@/components/AccountChip';
 
 /**
  * Demo aberta: joga sem conta, com o estado em localStorage na mesma chave do
@@ -23,5 +24,10 @@ export default function DemoPage() {
 
   if (initial === undefined) return null;
 
-  return <OracleLogic store={store} initial={initial} />;
+  return (
+    <>
+      <OracleLogic store={store} initial={initial} />
+      <AccountChip />
+    </>
+  );
 }

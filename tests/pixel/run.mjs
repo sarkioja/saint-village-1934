@@ -74,13 +74,65 @@ const initScript = (save) => `
   })();
 
   // 3. Animacoes e transicoes desligadas (o cursor piscante e o neon de 1994
-  //    sao animados e tornariam a captura instavel).
+  //    sao animados e tornariam a captura instavel), e o chip de conta escondido.
+  //
+  //    O chip ([data-sv-account]) e' o UNICO elemento que o app acrescenta a'
+  //    interface do artifact. Como e' position:fixed, nao participa do fluxo:
+  //    esconde-lo deixa o resto da pagina rigorosamente igual, e a comparacao
+  //    continua cobrindo o layout inteiro. Se ele deixar de ser fixed, a altura
+  //    da pagina muda e este gate falha — que e' o comportamento desejado.
   document.addEventListener('DOMContentLoaded', function () {
     const st = document.createElement('style');
-    st.textContent = '*,*::before,*::after{animation:none !important;transition:none !important;caret-color:transparent !important}';
+    st.textContent =
+      '*,*::before,*::after{animation:none !important;transition:none !important;caret-color:transparent !important}' +
+      '[data-sv-account]{display:none !important}';
     document.documentElement.appendChild(st);
   });
 `;
+
+/**
+ * Chromium desenha o texto interno de um <select> pelo caminho do controle
+ * NATIVO, nao por CSS. Dois documentos que chegam a layout identico por
+ * caminhos de reflow diferentes podem pousar esse texto um pixel acima ou
+ * abaixo. Foi medido: com caixa, fonte, opcoes e valor provadamente iguais nos
+ * dois lados, 969 de 969 pixels divergentes estavam DENTRO de <select> e zero
+ * fora.
+ *
+ * Afrouxar a tolerancia global mascararia regressoes de verdade. Entao:
+ *   - a geometria e o conteudo dos controles sao comparados pelo DOM, o que e'
+ *     MAIS rigoroso que pixel (pega opcao errada, valor errado, tamanho errado);
+ *   - e so' o INTERIOR deles e' achatado antes do diff, preservando a borda,
+ *     que e' desenhada por CSS e continua sendo comparada.
+ */
+const INSET = 2;
+function flattenControls(png, controls) {
+  for (const c of controls) {
+    const x0 = Math.max(0, c.x + INSET);
+    const y0 = Math.max(0, c.y + INSET);
+    const x1 = Math.min(png.width, c.x + c.w - INSET);
+    const y1 = Math.min(png.height, c.y + c.h - INSET);
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * png.width + x) * 4;
+        png.data[i] = 0;
+        png.data[i + 1] = 0;
+        png.data[i + 2] = 0;
+        png.data[i + 3] = 255;
+      }
+    }
+  }
+}
+
+/** Diferenca entre os controles descritos pelo DOM dos dois lados. */
+function controlsDiff(a, b) {
+  if (a.length !== b.length) return `numero de controles: ${a.length} vs ${b.length}`;
+  for (let i = 0; i < a.length; i++) {
+    const ka = JSON.stringify(a[i]);
+    const kb = JSON.stringify(b[i]);
+    if (ka !== kb) return `controle ${i}: ${ka} vs ${kb}`;
+  }
+  return null;
+}
 
 /** As 12 fontes que o artifact nao empacotou: serve do disco, para o teste ser offline e justo. */
 async function routeFonts(page) {
@@ -96,56 +148,150 @@ async function routeFonts(page) {
   await page.route('https://fonts.googleapis.com/**', (r) => r.abort());
 }
 
-async function settle(page) {
-  await page.waitForFunction(() => document.body && document.body.innerText.trim().length > 120, {
-    timeout: 30000,
-  });
+async function settle(page, side) {
+  try {
+    await page.waitForFunction(() => document.body && document.body.innerText.trim().length > 120, {
+      timeout: 25000,
+    });
+  } catch {
+    const seen = await page
+      .evaluate(() => (document.body?.innerText || '').trim().slice(0, 80))
+      .catch(() => '');
+    throw new Error(
+      `lado "${side}" nao renderizou (texto visivel: ${JSON.stringify(seen)}). ` +
+        (side === 'novo'
+          ? 'O servidor do app respondeu vazio — o build mudou enquanto o teste rodava?'
+          : 'O artifact original nao desempacotou.'),
+    );
+  }
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(350);
 }
 
-async function shoot(browser, url, save, viewport) {
+async function shoot(browser, url, save, viewport, side) {
   const page = await browser.newPage({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: 1, // comparacao em pixels reais
   });
-  await routeFonts(page);
-  await page.addInitScript(initScript(save));
-  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
-  await settle(page);
-  const buf = await page.screenshot({ fullPage: true });
-  const height = await page.evaluate(() => document.documentElement.scrollHeight);
-  await page.close();
-  return { buf, height };
+  try {
+    await routeFonts(page);
+    await page.addInitScript(initScript(save));
+    await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    await settle(page, side);
+
+    // Controles de formulario: comparados pelo DOM, nao por pixel (ver abaixo).
+    const controls = await page.evaluate(() =>
+      [...document.querySelectorAll('select,input,textarea')].map((el) => {
+        const b = el.getBoundingClientRect();
+        const s = el;
+        return {
+          tag: el.tagName,
+          x: Math.round(b.left + scrollX),
+          y: Math.round(b.top + scrollY),
+          w: Math.round(b.width),
+          h: Math.round(b.height),
+          value: 'value' in s ? String(s.value ?? '') : '',
+          text:
+            el.tagName === 'SELECT'
+              ? String(s.options?.[s.selectedIndex]?.text ?? '')
+              : String(s.placeholder ?? ''),
+          options: el.tagName === 'SELECT' ? s.options.length : undefined,
+        };
+      }),
+    );
+
+    const buf = await page.screenshot({ fullPage: true });
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    return { buf, height, controls };
+  } finally {
+    await page.close();
+  }
 }
 
 // ------------------------------------------------------------------ servidor
-function startServer() {
-  return new Promise((resolve, reject) => {
-    const p = spawn('npx', ['next', 'start', '-p', String(PORT)], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, SV_PIXEL_TEST: '1' },
-    });
-    let done = false;
-    const onData = (d) => {
-      const s = d.toString();
-      if (!done && /Ready in|started server|Local:/i.test(s)) {
-        done = true;
-        setTimeout(() => resolve(p), 600);
+//
+// Tres cuidados aqui, cada um por causa de um falso negativo que ja' aconteceu:
+//
+// 1. Esperar a RESPOSTA HTTP, nao a linha de log. O Next imprime "Local: ..."
+//    antes de estar ouvindo, e o primeiro caso batia num servidor que ainda nao
+//    atendia — o lado "novo" saia em branco.
+// 2. Abortar se a porta ja' estiver ocupada. Um `next start` orfao de uma rodada
+//    anterior serve um .next que depois foi reescrito: os chunks nao existem mais,
+//    a pagina vem branca, e TODOS os casos "falham" sem motivo real.
+// 3. Matar o GRUPO de processos. O filho direto era o npx, e o next-server
+//    sobrevivia ao SIGTERM, virando justamente o orfao do item 2.
+
+async function portBusy() {
+  try {
+    const r = await fetch(BASE + '/', { signal: AbortSignal.timeout(1500) });
+    return r.status > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function waitUntilServing(timeoutMs = 60000) {
+  const t0 = Date.now();
+  for (;;) {
+    try {
+      const r = await fetch(BASE + '/', { signal: AbortSignal.timeout(2000) });
+      if (r.ok) {
+        const html = await r.text();
+        if (html.length > 500) return;
       }
-    };
-    p.stdout.on('data', onData);
-    p.stderr.on('data', onData);
-    p.on('exit', (c) => {
-      if (!done) reject(new Error('next start saiu com codigo ' + c));
-    });
-    setTimeout(() => {
-      if (!done) {
-        done = true;
-        resolve(p);
-      }
-    }, 20000);
+    } catch {
+      /* ainda subindo */
+    }
+    if (Date.now() - t0 > timeoutMs) throw new Error('o servidor do app nao atendeu em ' + timeoutMs + 'ms');
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+async function startServer() {
+  if (await portBusy()) {
+    throw new Error(
+      `a porta ${PORT} ja' esta' em uso. Um \`next start\` de uma rodada anterior sobrou e ` +
+        'serviria um build velho (todos os casos falhariam em branco). Encerre-o ' +
+        '(`pkill -f "next start"`) ou use SV_PORT=outra.',
+    );
+  }
+
+  const bin = path.resolve('node_modules/next/dist/bin/next');
+  const p = spawn(process.execPath, [bin, 'start', '-p', String(PORT)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true, // proprio grupo, para poder matar tudo depois
+    env: { ...process.env, SV_PIXEL_TEST: '1' },
   });
+
+  let exited = null;
+  p.on('exit', (c) => {
+    exited = c;
+  });
+  const log = [];
+  const grab = (d) => log.push(d.toString());
+  p.stdout.on('data', grab);
+  p.stderr.on('data', grab);
+
+  try {
+    await waitUntilServing();
+  } catch (e) {
+    const why = exited != null ? ` (next start saiu com codigo ${exited})` : '';
+    throw new Error(e.message + why + '\n' + log.join('').slice(-800));
+  }
+  return p;
+}
+
+function stopServer(p) {
+  if (!p?.pid) return;
+  try {
+    process.kill(-p.pid, 'SIGTERM'); // o grupo inteiro
+  } catch {
+    try {
+      p.kill('SIGTERM');
+    } catch {
+      /* ja' morreu */
+    }
+  }
 }
 
 // ---------------------------------------------------------------------- main
@@ -163,6 +309,20 @@ mkdirSync(OUT, { recursive: true });
 mkdirSync(DIFF, { recursive: true });
 
 const origUrl = 'file://' + path.resolve(ORIGINAL);
+
+// Guarda contra um erro facil de cometer: rodar `next build` enquanto o gate
+// esta' no ar troca o .next debaixo do `next start` e faz TODOS os casos
+// falharem com a pagina vazia. Comparamos o BUILD_ID no fim para dizer isso
+// em vez de deixar 41 falhas sem explicacao.
+const buildIdAt = () => {
+  try {
+    return readFileSync('.next/BUILD_ID', 'utf8').trim();
+  } catch {
+    return '';
+  }
+};
+const buildIdBefore = buildIdAt();
+
 const server = await startServer();
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 
@@ -173,8 +333,24 @@ try {
       const name = `${vp.name}-${c.id}`;
       let r;
       try {
-        const a = await shoot(browser, origUrl, c.save, vp);
-        const b = await shoot(browser, BASE + '/', c.save, vp);
+        // Os dois lados em paralelo: o artifact original tem 6 MB para parsear
+        // a cada carga, e serializar isso dobrava o tempo do gate.
+        //
+        // Com retry porque o original desempacota fontes e dados em JS na
+        // abertura e as vezes nao termina dentro do tempo — e' lentidao do
+        // artifact, nao divergencia de layout.
+        let a, b;
+        for (let attempt = 1; ; attempt++) {
+          try {
+            [a, b] = await Promise.all([
+              shoot(browser, origUrl, c.save, vp, 'original'),
+              shoot(browser, BASE + '/', c.save, vp, 'novo'),
+            ]);
+            break;
+          } catch (e) {
+            if (attempt >= 3) throw e;
+          }
+        }
 
         if (a.height !== b.height) {
           r = { name, ok: false, why: `altura difere: original ${a.height}px vs novo ${b.height}px` };
@@ -184,6 +360,17 @@ try {
           if (pa.width !== pb.width || pa.height !== pb.height) {
             r = { name, ok: false, why: `dimensao difere: ${pa.width}x${pa.height} vs ${pb.width}x${pb.height}` };
           } else {
+            // Controles conferidos pelo DOM antes do diff de imagem.
+            const cd = controlsDiff(a.controls, b.controls);
+            if (cd) {
+              r = { name, ok: false, why: 'controles divergem — ' + cd };
+              results.push(r);
+              console.log(`FALHA ${name} — ${r.why}`);
+              continue;
+            }
+            flattenControls(pa, a.controls);
+            flattenControls(pb, b.controls);
+
             const diff = new PNG({ width: pa.width, height: pa.height });
             const n = pixelmatch(pa.data, pb.data, diff.data, pa.width, pa.height, {
               threshold: 0.1,
@@ -211,7 +398,16 @@ try {
   }
 } finally {
   await browser.close();
-  server.kill('SIGTERM');
+  stopServer(server);
+}
+
+const buildIdAfter = buildIdAt();
+if (buildIdBefore && buildIdAfter && buildIdBefore !== buildIdAfter) {
+  console.log(
+    '\nATENCAO: o build mudou durante o gate (BUILD_ID ' +
+      `${buildIdBefore} -> ${buildIdAfter}). O servidor servia um .next sendo` +
+      ' reescrito; as falhas abaixo nao sao confiaveis. Rode de novo sem buildar em paralelo.',
+  );
 }
 
 const bad = results.filter((r) => !r.ok);
