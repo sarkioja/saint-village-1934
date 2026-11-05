@@ -8,19 +8,18 @@ const tpl = readFileSync('source/template.html', 'utf8');
 const styles = [...tpl.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
 if (!styles.length) throw new Error('nenhum bloco <style> encontrado');
 
-// 2. Tabela UUID -> arquivo servido
+// 2. Tabela UUID -> arquivo servido.
+// Vem de source/asset-map.json, gerado por tools/sync-assets.mjs: cada
+// exportação do artifact gera UUIDs novos, e uma tabela escrita à mão aqui
+// quebraria silenciosamente a cada rodada do designer.
 const fonts = new Set(readdirSync('public/fonts').map((f) => f.replace(/\.woff2$/, '')));
-const assets = {
-  '3f407024-ced9-4ca3-bf36-8735fe0e5906': '/assets/city.png',
-  'aa21b305-5698-4e7e-a3c3-ab1c3b535120': '/assets/map.svg',
-};
+const assets = JSON.parse(readFileSync('source/asset-map.json', 'utf8'));
 
 let unresolved = [];
 
 // Assets empacotados no artifact, referenciados por UUID.
 const remapUuid = (css) =>
   css.replace(/url\((["']?)([0-9a-f-]{36})\1\)/g, (full, q, uuid) => {
-    if (fonts.has(uuid)) return `url("/fonts/${uuid}.woff2")`;
     if (assets[uuid]) return `url("${assets[uuid]}")`;
     unresolved.push(uuid);
     return full;

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { __setProvider, type LlmProvider, type LlmRequest } from '@/lib/llm';
 import { __setStore } from '@/lib/store';
-import { stripMarks } from '@/lib/oracle/logic';
+import { stripMarks } from '@/lib/oracle/extensions';
 
 let dataDir: string;
 

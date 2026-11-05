@@ -38,7 +38,18 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   }
   // O cliente manda {era, tab, eras} — a mesma forma do save do artifact.
   const rev = Number(body.rev ?? r.c.rev);
-  const state = { era: body.era ?? null, tab: body.tab ?? 'cronica', eras: body.eras ?? {} };
+  // O v2 acrescentou a câmera do mapa (zoom e pan) ao save. Só números passam:
+  // o estado vai para o banco como JSON e o cliente o devolve ao React.
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  const state = {
+    era: body.era ?? null,
+    tab: body.tab ?? 'cronica',
+    eras: body.eras ?? {},
+    mapZ: num(body.mapZ),
+    mapX: num(body.mapX),
+    mapY: num(body.mapY),
+    mapFz: num(body.mapFz),
+  };
 
   try {
     const next = await r.store.saveCampaign(id, state, rev);

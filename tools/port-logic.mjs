@@ -1,44 +1,86 @@
-// Monta lib/oracle/logic.tsx a partir de source/component.js.
+// Monta lib/oracle/logic.tsx e lib/server/prompt.ts a partir de source/component.js.
 //
-// O corpo da classe e' copiado VERBATIM do artifact, em duas fatias, porque e' o
-// motor de regras do jogo (GUMSHOE, parser de marcacoes, dados, Fios, saltos de
-// era) e qualquer reescrita seria risco puro. Trocamos exatamente tres coisas:
+// O corpo e o prelúdio são copiados VERBATIM do artifact, porque são o motor de
+// regras do jogo (GUMSHOE, parser de marcações, dados, Fios, saltos de era) e a
+// animação de rolagem. Qualquer reescrita seria risco puro.
 //
-//   1. prelude  — os globais SV_* viram imports de JSON; load() vira o Store
-//   2. systemPrompt() + narrate() (linhas 143-210) saem: a montagem do prompt
-//      vai para o servidor (lib/server/prompt.ts, que tem o texto do livro) e
-//      narrate() passa a falar com /api/narrate
-//   3. render()  — DCLogic vira React.Component renderizando OracleView
+// As fatias são localizadas POR PADRÃO, não por número de linha. A primeira
+// versão usava linhas fixas e quebrou inteira quando o designer entregou uma
+// revisão: o prelúdio passou de 20 para 85 linhas. Procurar pelo texto custa o
+// mesmo e sobrevive à próxima rodada.
 //
-// Rode com `npm run gen`. NAO edite lib/oracle/logic.tsx a mao.
+// Trocamos exatamente quatro coisas:
+//   1. os globais window.SV_* viram imports de JSON
+//   2. systemPrompt() sai para o servidor (depende do texto do livro)
+//   3. narrate() e genNpc() passam a falar com a API
+//   4. load()/save() passam pelo Store; DCLogic vira React.Component
+//
+// Rode com `npm run gen`. NÃO edite os arquivos gerados a mão.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const src = readFileSync('source/component.js', 'utf8').split('\n');
+const src = readFileSync('source/component.js', 'utf8');
+const linhas = src.split('\n');
 
-// Fatias verbatim (1-indexed, inclusivo), conferidas contra o arquivo original.
-const slice = (a, b) => src.slice(a - 1, b).join('\n');
-const HEAD = slice(21, 141); // `class Component extends DCLogic {` ... isGeral()
-const TAIL = slice(212, 572); // ingest() ... renderVals() ... fecha a classe
-
-// Guarda: se o arquivo de origem mudar, as fatias param de casar e isso grita.
-if (!HEAD.startsWith('class Component extends DCLogic {')) {
-  throw new Error('fatia HEAD nao comeca na classe — source/component.js mudou?');
-}
-if (!TAIL.trimStart().startsWith('ingest(text, opts){')) {
-  throw new Error('fatia TAIL nao comeca em ingest() — source/component.js mudou?');
-}
-if (!TAIL.trimEnd().endsWith('}')) throw new Error('fatia TAIL nao fecha a classe');
-if (slice(143, 143).trim() !== 'systemPrompt(npc){') {
-  throw new Error('systemPrompt nao esta na linha 143 — source/component.js mudou?');
+/** Índice (1-based) da primeira linha que casa, ou erro com contexto. */
+function acha(re, oque) {
+  for (let i = 0; i < linhas.length; i++) if (re.test(linhas[i])) return i + 1;
+  throw new Error(`não encontrei ${oque} em source/component.js (padrão ${re})`);
 }
 
-const PRELUDE = `// GENERATED por tools/port-logic.mjs a partir de source/component.js — NAO EDITAR A MAO.
+const L_CLASSE = acha(/^class Component extends DCLogic \{/, 'a declaração da classe');
+const L_PROMPT = acha(/^\s{2}systemPrompt\(/, 'systemPrompt()');
+const L_NARRATE = acha(/^\s{2}async narrate\(/, 'narrate()');
+const L_INGEST = acha(/^\s{2}ingest\(/, 'ingest()');
+
+if (!(L_CLASSE < L_PROMPT && L_PROMPT < L_NARRATE && L_NARRATE < L_INGEST)) {
+  throw new Error('a ordem dos métodos mudou — revise o porter antes de confiar nas fatias');
+}
+
+/** Fatia 1-based inclusiva. */
+const slice = (a, b) => linhas.slice(a - 1, b).join('\n');
+
+const PRELUDE_ORIG = slice(1, L_CLASSE - 1); // helpers de módulo: dados, toast, animação
+const HEAD = slice(L_CLASSE, L_PROMPT - 1); // classe + métodos até systemPrompt
+// Corpo de systemPrompt() sem a assinatura e sem a chave que o fecha: a função
+// geradora em prompt.ts fecha a sua. A fatia vai até narrate() e por isso pega
+// linhas em branco e o `  }` final — removidos aqui, com verificação, para um
+// `}` sobrando não virar um erro de sintaxe a 120 linhas de distância.
+const PROMPT_BODY = (() => {
+  const l = slice(L_PROMPT + 1, L_NARRATE - 1).split('\n');
+  while (l.length && !l[l.length - 1].trim()) l.pop();
+  if (l[l.length - 1].trim() !== '}') {
+    throw new Error('systemPrompt() não termina em "}": ' + JSON.stringify(l[l.length - 1]));
+  }
+  l.pop();
+  return l.join('\n');
+})();
+const TAIL = slice(L_INGEST, linhas.length); // ingest() ... renderVals() ... fecha a classe
+
+// ---------------------------------------------------------------- prelúdio
 //
-// O corpo desta classe e' o motor de regras do artifact original, copiado verbatim.
-// ts-nocheck e' deliberado: o porte e' validado pelo diff de pixels (tests/pixel) e
-// pelos testes de unidade do parser de marcacoes, nao pelo compilador. Todo codigo
-// NOVO do projeto (rotas, store, auth) e' tipado normalmente.
+// Copiado inteiro. Só os acessores aos globais mudam: no artifact os dados
+// vinham de <script> no documento; aqui são módulos JSON.
+let prelude = PRELUDE_ORIG
+  .replace(
+    'const R = () => window.SV_REGRAS, L = () => window.SV_LIVROS, S = () => window.SV_SECULO;',
+    'const R = () => REGRAS as any, L = () => LIVROS as any, S = () => SECULO as any;',
+  )
+  .replace(
+    'const modsOf = e => (window.SV_REGRAS && window.SV_REGRAS[e] && window.SV_REGRAS[e].mods) || [];',
+    'const modsOf = e => (R() && R()[e] && R()[e].mods) || [];',
+  );
+
+if (prelude.includes('window.SV_')) {
+  throw new Error('sobrou acesso a window.SV_* no prelúdio: ' + (prelude.match(/window\.SV_\w+/g) || []).join(', '));
+}
+
+const CABECALHO = `// GENERATED por tools/port-logic.mjs a partir de source/component.js — NAO EDITAR A MAO.
+//
+// O prelúdio e o corpo desta classe são o motor do artifact original, copiados
+// verbatim. ts-nocheck é deliberado: o porte é validado pelo diff de pixels
+// (tests/pixel) e pelos testes das marcações, não pelo compilador. Todo código
+// NOVO do projeto (rotas, store, auth, automações) é tipado normalmente.
 // @ts-nocheck
 'use client';
 
@@ -47,57 +89,30 @@ import OracleView from '@/components/generated/OracleView';
 import REGRAS from './data/regras.json';
 import LIVROS from './data/livros.json';
 import SECULO from './data/seculo.json';
+import { lerExtensoes, aplicarExtensoes, stripMarks } from './extensions';
 import type { Store, SaveShape } from './store';
 
-// ---- os globais do artifact, agora modulos ----------------------------------
-const R = () => REGRAS as any;
-const L = () => LIVROS as any;
-const S = () => SECULO as any;
-
-// ---- prelude do artifact (linhas 1-20), preservado -------------------------
-const TABS = [['cronica','Crônica'],['caso','Caso'],['ficha','Ficha'],['dados','Dados'],['elenco','Elenco'],['cidade','Cidade'],['seculo','Século'],['tutorial','Como jogar']];
-const ERAS = ['1934','1946','1974','1994','1999'];
-const modsOf = e => (R() && R()[e] && R()[e].mods) || [];
-const triCount = fios => { const E=new Set(), V=new Set(); (fios||[]).filter(f=>f.st==='firme').forEach(f=>{E.add(f.a+'|'+f.b);E.add(f.b+'|'+f.a);V.add(f.a);V.add(f.b);}); const v=[...V]; let n=0; for(let i=0;i<v.length;i++)for(let j=i+1;j<v.length;j++)for(let k=j+1;k<v.length;k++) if(E.has(v[i]+'|'+v[j])&&E.has(v[j]+'|'+v[k])&&E.has(v[i]+'|'+v[k])) n++; return n; };
-const rnd = n => 1 + Math.floor(Math.random()*n);
-const pick = a => a[Math.floor(Math.random()*a.length)];
-const uid = () => Math.random().toString(36).slice(2,9);
-const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
-const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase().trim();
-const sign = n => (n>0?'+':n<0?'−':'') + Math.abs(n);
-function invList(era){ const r=R(); return [...r.comum.invAcad, ...r.comum.invInter, ...(r[era].invInterExtra||[]), ...r[era].invTec]; }
-function blankChar(era){ const inv={}; invList(era).forEach(k=>inv[k]=1); return {nome:'',conceito:'',arq:'',ori:'',mot:'',lado:'Contrato',inv,esp:[],saude:8,sf:8,med:7,imp:4,adr:1,vicioTr:0,imprensa:0,ficha:0,ruido:0,medalha:'',anoNasc:'',lacoEra:'',lacoDe:'',herancas:'',testamento:'',antepassado:'',regras:'',fontes:'',vicio:'',segredo:'',equip:'',notas:''}; }
-function blankCaso(){ return {titulo:'',premissa:'',segredo:'',pistas:[],provas:[],vant:[],prob:[],nec:4,fios:[],medalhaUsos:0,flash:false,jaVi:false}; }
-function blankEra(era){ return {char:blankChar(era),log:[],caso:blankCaso(),cena:'',naCena:[],custom:[]}; }
-const stateOf = (v,kind) => kind==='saude' ? (v>0?'Inteiro':v>-6?'Ferido':v>-12?'Gravemente ferido':'Morto') : (v>0?'Inteiro':v>-6?'Abalado':v>-12?'Marcado':'Quebrado');
-
-// ---- props -----------------------------------------------------------------
 type Props = {
-  /** Persistencia: localStorage na demo, API na conta. */
+  /** Persistência: localStorage na demo, API na conta. */
   store: Store;
-  /** Estado inicial ja' carregado (SSR ou localStorage). */
+  /** Estado inicial já carregado (SSR ou localStorage). */
   initial: SaveShape | null;
-  /** Preferencias do narrador, antes props fixos do artifact. */
+  /** Preferências do narrador, antes props fixos do artifact. */
   tamanhoNarracao?: 'curto' | 'medio' | 'longo';
   modeloIA?: 'haiku' | 'sonnet';
-  /** Quantas entradas do log vao como historico (botao de custo; padrao 18 = original). */
+  /** Quantas entradas do log vão como histórico (o servidor impõe o teto). */
   historyTurns?: number;
-  /** Mensagem exibida quando a cota diaria estoura. */
+  /** Mensagem exibida quando a cota diária estoura. */
   onQuota?: (msg: string) => void;
 };
 
 `;
 
-// narrate(): a montagem do prompt foi para o servidor; aqui so' sobra o transporte.
+// ------------------------------------------------------------------ narrate
+//
+// A montagem do prompt foi para o servidor; aqui só fica o transporte. O texto
+// completo volta no evento 'done' e é o ingest() original que o interpreta.
 const NARRATE = `
-  /**
-   * Pede uma narracao ao servidor. O prompt de sistema (com o texto do livro) e'
-   * montado em lib/server/prompt.ts; o cliente manda apenas o estado do jogo.
-   *
-   * A prosa chega em stream para aparecer na tela conforme sai, mas as marcacoes
-   * ([PISTA: ...], [TESTE: ...]) so' sao aplicadas no fim, pelo ingest() original,
-   * sobre o texto completo — o motor de regras nao e' tocado.
-   */
   async narrate(instr, opts={}){
     if(this.state.busy) return;
     this.setState({busy:true});
@@ -117,6 +132,7 @@ const NARRATE = `
           cena: d.cena,
           naCena: d.naCena.map(id=>this.npcById(id)).filter(Boolean).map(n=>this.fmtNpc(n)),
           history: d.log.slice(-(this.props.historyTurns||18)).map(e=>this.fmt(e)),
+          resumo: d.caso && d.caso.resumo ? d.caso.resumo : '',
           prefs: {
             tamanhoNarracao: this.props.tamanhoNarracao || 'medio',
             modeloIA: this.props.modeloIA || 'haiku',
@@ -134,7 +150,6 @@ const NARRATE = `
       }
       if(!res.ok || !res.body) throw new Error('narrate ' + res.status);
 
-      // Stream: mostra a prosa chegando numa entrada provisoria.
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf='', full='', opened=false;
@@ -162,72 +177,80 @@ const NARRATE = `
         }
       }
 
-      // Remove a entrada provisoria e deixa o ingest() original fazer o trabalho.
       if(opened) this.upd(e=>({...e,log:e.log.filter(x=>x.id!==streamId)}));
-      this.ingest(full||'', opts);
+
+      // As marcações NOVAS (cena, caso, fio) saem do texto ANTES do motor
+      // original — que segue intocado e recebe só o vocabulário dele — e são
+      // gravadas DEPOIS, porque ingest() reescreve caso e cena por inteiro a
+      // partir de uma leitura que fez antes de rodar.
+      const ext = lerExtensoes(full||'');
+      this.ingest(ext.texto, opts);
+      aplicarExtensoes(ext, this);
+      this.talvezResumir();
     }catch(err){
       this.upd(e=>({...e,log:e.log.filter(x=>x.id!==streamId)}));
       this.addLog({k:'mech',who:'Erro',text:'O narrador não respondeu. Tente de novo.'});
     }
     this.setState({busy:false});
   }
+
+  /**
+   * Memória longa: a cada N turnos pede um parágrafo de resumo e o guarda no
+   * caso. O prompt passa a levar resumo + histórico recente, em vez de só as
+   * últimas entradas — o narrador para de esquecer o começo da crônica, e em
+   * crônicas longas o custo cai.
+   */
+  async talvezResumir(){
+    const d=this.cur(); if(!d) return;
+    const narrativas=d.log.filter(e=>e.k==='narr'||e.k==='npc').length;
+    const PASSO=12;
+    if(narrativas < PASSO) return;
+    if((d.caso.resumoEm||0) + PASSO > narrativas) return;
+    try{
+      const res=await fetch('/api/resumo',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({ era:this.state.era, anterior:d.caso.resumo||'',
+          history:d.log.slice(-40).map(e=>this.fmt(e)),
+          prefs:{modeloIA:this.props.modeloIA||'haiku'} })});
+      if(!res.ok) return;
+      const j=await res.json();
+      if(j && j.resumo) this.setCaso({resumo:String(j.resumo), resumoEm:narrativas});
+    }catch(e){ /* resumo e' melhoria, nao requisito: falhar aqui nao atrapalha a cena */ }
+  }
 `;
 
 const RENDER = `
-  /** DCLogic chamava renderVals() por fora; aqui a propria classe renderiza. */
+  /** DCLogic chamava renderVals() por fora; aqui a própria classe renderiza. */
   render(){
     return <OracleView v={this.renderVals()} />;
   }
 `;
 
-// Esconde marcacoes (inclusive uma `[PISTA: ...` ainda pela metade) durante o stream,
-// para que nenhuma apareca piscando na tela.
-const HELPERS = `
-/**
- * Durante o stream, remove marcacoes completas e qualquer marcacao parcial no fim
- * do buffer, para que nada como "[PIST" apareca na tela.
- */
-export function stripMarks(t: string): string {
-  return t
-    .replace(/\\[[^\\[\\]]{1,240}\\]/g, '')
-    .replace(/\\[[^\\[\\]]{0,240}$/, '')
-    .replace(/[ \\t]+\\n/g, '\\n')
-    .replace(/\\n{3,}/g, '\\n\\n');
-}
-`;
+// --------------------------------------------------------- substituições
+const SUBS_HEAD = [
+  ['class Component extends DCLogic {', 'export default class OracleLogic extends React.Component<Props, any> {'],
+  [
+    "state = Object.assign({ era:null, tab:'cronica', eras:{} }, load()||{}, {",
+    "state = Object.assign({ era:null, tab:'cronica', eras:{} }, this.props.initial||{}, {",
+  ],
+  [
+    // O v2 passou a persistir também a câmera do mapa (zoom e pan).
+    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz}=this.state; try{ localStorage.setItem(LS, JSON.stringify({era,tab,eras,mapZ,mapX,mapY,mapFz})); }catch(e){} }",
+    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz}=this.state; this.props.store.write({era,tab,eras,mapZ,mapX,mapY,mapFz}); }",
+  ],
+];
 
-// O artifact fazia `load()` de localStorage e `save()` direto. Agora vem do Store.
-const head = HEAD
-  .replace(
-    'class Component extends DCLogic {',
-    'export default class OracleLogic extends React.Component<Props, any> {',
-  )
-  .replace(
-    'state = Object.assign({ era:null, tab:\'cronica\', eras:{} }, load()||{}, {',
-    'state = Object.assign({ era:null, tab:\'cronica\', eras:{} }, this.props.initial||{}, {',
-  )
-  .replace(
-    'save(){ const {era,tab,eras}=this.state; try{ localStorage.setItem(LS, JSON.stringify({era,tab,eras})); }catch(e){} }',
-    'save(){ const {era,tab,eras}=this.state; this.props.store.write({era,tab,eras}); }',
-  );
-
-// Checa que as tres substituicoes pegaram (se o original mudar, falha ruidosamente).
-for (const [what, needle] of [
-  ['classe', 'export default class OracleLogic'],
-  ['estado inicial', 'this.props.initial||{}'],
-  ['save via store', 'this.props.store.write'],
-]) {
-  if (!head.includes(needle)) throw new Error('substituicao falhou: ' + what);
+let head = HEAD;
+for (const [de, para] of SUBS_HEAD) {
+  if (!head.includes(de)) throw new Error('substituição não encontrada no HEAD: ' + de.slice(0, 60));
+  head = head.split(de).join(para);
 }
 
-// genNpc() esta' na fatia TAIL e tambem falava com o runtime do artifact. Pior:
-// usava LL.textos, que agora so' existe no servidor. Vai para /api/npc.
-const GEN_NPC_OLD = slice(548, 553);
-if (!/genNpc:async\(\)=>\{ if\(!window\.claude/.test(GEN_NPC_OLD)) {
-  throw new Error('bloco genNpc nao esta nas linhas 548-553 — source/component.js mudou?');
-}
+// genNpc() também falava com o runtime do artifact, e usava LL.textos — que
+// agora só existe no servidor.
+const mGen = TAIL.match(/ {6}genNpc:async\(\)=>\{[\s\S]*?this\.setState\(\{busy:false\}\); \},/);
+if (!mGen) throw new Error('bloco genNpc não encontrado no TAIL');
 
-const GEN_NPC_NEW = `      genNpc:async()=>{ if(this.state.busy) return; this.setState({busy:true});
+const GEN_NPC_NOVO = `      genNpc:async()=>{ if(this.state.busy) return; this.setState({busy:true});
         try{
           const res=await fetch('/api/npc',{method:'POST',headers:{'content-type':'application/json'},
             body:JSON.stringify({era, cena:d.cena||'', evitar:npcs.map(n=>n.n).slice(-40),
@@ -241,69 +264,112 @@ const GEN_NPC_NEW = `      genNpc:async()=>{ if(this.state.busy) return; this.se
         }catch(err){ this.addLog({k:'mech',who:'Erro',text:'Não foi possível gerar o NPC.'}); }
         this.setState({busy:false}); },`;
 
-const tailPorted = TAIL.replace(GEN_NPC_OLD, GEN_NPC_NEW);
-if (tailPorted === TAIL) throw new Error('substituicao do genNpc nao aplicou');
-if (/window\.claude/.test(tailPorted)) {
+const tail = TAIL.replace(mGen[0], GEN_NPC_NOVO);
+if (/window\.claude/.test(tail)) {
   throw new Error('sobrou window.claude no corpo portado');
 }
 
 const out =
-  PRELUDE + HELPERS + '\n' + head + '\n' + NARRATE + '\n' + tailPorted.replace(/\}\s*$/, '') + RENDER + '}\n';
+  CABECALHO +
+  prelude +
+  '\n\n' +
+  head +
+  '\n' +
+  NARRATE +
+  '\n' +
+  tail.replace(/\}\s*$/, '') +
+  RENDER +
+  '}\n';
 
 writeFileSync('lib/oracle/logic.tsx', out);
 
 // ===========================================================================
-// lib/server/prompt.ts — systemPrompt() do artifact, verbatim, no servidor.
+// lib/server/prompt.ts — systemPrompt() verbatim, no servidor.
 //
-// O corpo (linhas 144-195) e' copiado sem reescrita: ele carrega TODAS as regras
-// que o narrador precisa seguir, e uma reformulacao minha poderia mudar o jogo.
-// Declarando no topo os mesmos nomes que o metodo usava (RR, LL, SS, d, c, med),
-// o corpo roda intacto; restam 5 substituicoes pontuais, checadas uma a uma.
+// Fica aqui porque depende dos ~414 KB de texto do livro, que nunca devem ir
+// para o navegador, e porque é onde a chave de API é usada.
 // ===========================================================================
 
-let body = slice(144, 195);
+let body = PROMPT_BODY;
 
-const SUBS = [
-  // 1. cabecalho: vinha de this.state/this.cur(); agora vem dos argumentos.
+const SUBS_PROMPT = [
   [
     "    const s=this.state, era=s.era, RR=R()[era], LL=L()[era], d=this.cur(), c=d.char, med=RR.medidor.n;",
-    // Nao desestruturamos `caso` nem `naCena`: o proprio corpo declara esses nomes.
     "    const RR: any = (REGRAS as any)[era], SS: any = SECULO as any, med = RR.medidor.n;\n" +
       "    const LL: any = { ...(LIVROS as any)[era], textos: book.textos, geral: book.geral };\n" +
       "    const d: any = { char: input.char, caso: input.caso, cena: input.cena, naCena: input.naCena };\n" +
       "    const c: any = input.char;",
   ],
-  // 2. preferencia do narrador, antes prop fixo do artifact.
-  ["this.props.tamanhoNarracao", "prefs.tamanhoNarracao"],
-  // 3. fioTxt era metodo da classe (lia this.cur().caso.pistas).
-  ["this.fioTxt(f,i)", "fioTxt(f,i,d.caso.pistas)"],
-  // 4. os PdDs em cena chegam ja' formatados pelo cliente (que tem os dados deles).
+  ['this.props.tamanhoNarracao', 'prefs.tamanhoNarracao'],
+  ['this.fioTxt(f,i)', 'fioTxt(f,i,d.caso.pistas)'],
   [
     "d.naCena.map(id=>this.npcById(id)).filter(Boolean).map(n=>this.fmtNpc(n)).join('\\n')",
     "d.naCena.join('\\n')",
   ],
-  // 5. o perfil do PdD que fala tambem chega formatado.
-  ["this.fmtNpc(npc)", "npc.perfil"],
+  ['this.fmtNpc(npc)', 'npc.perfil'],
 ];
 
-for (const [from, to] of SUBS) {
-  if (!body.includes(from)) throw new Error('substituicao do prompt nao encontrada: ' + from.slice(0, 70));
-  body = body.split(from).join(to);
+for (const [de, para] of SUBS_PROMPT) {
+  if (!body.includes(de)) throw new Error('substituição do prompt não encontrada: ' + de.slice(0, 70));
+  body = body.split(de).join(para);
 }
 
-// A segunda linha do metodo redeclarava `has` e `SS`; SS ja' vem do nosso cabecalho.
 body = body.replace(
   "    const has=m=>(RR.mods||[]).includes(m), SS=S();",
   "    const has = (m: string) => (RR.mods||[]).includes(m);",
 );
+
+// O resumo rolante entra logo antes do histórico do caso, para o narrador ler
+// o que já aconteceu antes de ler o estado atual.
+body = body.replace(
+  'const caso = d.caso;',
+  "const caso = d.caso;\n    const resumoTxt = input.resumo ? `\\nO QUE JÁ ACONTECEU NESTA CRÔNICA (resumo; o histórico recente vem depois): ${input.resumo}\\n` : '';",
+);
+body = body.replace('O CASO: ${casoTxt}', 'O CASO: ${casoTxt}${resumoTxt}');
+
+// ------------------------------------------------- marcações das automações
+//
+// Três chaves novas, lidas por lib/oracle/extensions.ts e NUNCA por ingest().
+// Existem porque o jogo já pedia essas três coisas ao narrador em prosa e
+// deixava o jogador transcrevê-las à mão: o prompt manda "escolha uma região
+// coerente e diga onde estamos" sem dar como avisar o app, o caso nasce com
+// título e premissa em branco, e os Fios do Mural só existiam se o jogador os
+// digitasse. Agora o narrador diz, e a ficha acompanha.
+body = body.replace(
+  "    const lista = LL.npcs.map(n=>n.n).join('; ');",
+  "    const lista = LL.npcs.map(n=>n.n).join('; ');\n" +
+    "    const regioesTxt = (LL.regioes||[]).map(r=>r.nome).join('; ');",
+);
+
+body = body.replace(
+  '${reg}\n\nPERSONAGENS DO DIRETOR EM CENA',
+  '${reg}\n\nREGIÕES DESTA ERA (nomes exatos): ${regioesTxt}\n\nPERSONAGENS DO DIRETOR EM CENA',
+);
+
+const MARCACOES_NOVAS =
+  '[NPC: Nome exato] quando um Personagem do Diretor do livro entrar em cena.\n' +
+  '[CENA: Nome exato da região] sempre que a cena mudar de região, e também no primeiro turno em que a região ainda não estiver definida. Use um dos nomes da lista REGIÕES DESTA ERA, escrito igual.\n' +
+  "${caso.titulo && caso.premissa ? '' : '[CASO: Título curto | premissa em uma frase] quando o caso ganhar forma, para o app preencher a aba Caso. O que o jogador já escreveu não é sobrescrito.\\n'}" +
+  "${has('mural') ? '[FIO-NOVO: pista | pista | relação em poucas palavras] quando duas pistas já anotadas se ligarem. Identifique cada pista pelo número dela na lista de pistas já obtidas, ou por um trecho literal do texto dela. O Fio nasce solto; quem o verifica é o jogador.\\n' : ''}";
+
+if (!body.includes('[NPC: Nome exato] quando um Personagem do Diretor do livro entrar em cena.')) {
+  throw new Error('bloco de MARCAÇÕES não encontrado: o designer mudou o prompt');
+}
+body = body.replace(
+  '[NPC: Nome exato] quando um Personagem do Diretor do livro entrar em cena.',
+  MARCACOES_NOVAS,
+);
+
 if (body.includes('S()')) throw new Error('sobrou chamada a S() no prompt');
-if (/this\./.test(body)) throw new Error('sobrou `this.` no prompt: ' + body.match(/this\.[a-zA-Z]+/g));
+if (/this\./.test(body)) {
+  throw new Error('sobrou `this.` no prompt: ' + (body.match(/this\.[a-zA-Z]+/g) || []).join(', '));
+}
 
 const prompt = `// GENERATED por tools/port-logic.mjs a partir de source/component.js — NAO EDITAR A MAO.
 //
-// systemPrompt() do artifact, copiado verbatim das linhas 144-195. Fica no SERVIDOR
-// porque depende dos ~414 KB de texto do livro (lib/server/book/*.json), que nunca
-// devem ir para o navegador — e porque e' aqui que a chave de API e' usada.
+// systemPrompt() do artifact, copiado verbatim. Fica no SERVIDOR porque depende
+// dos ~414 KB de texto do livro (lib/server/book/*.json), que nunca devem ir
+// para o navegador, e porque é aqui que a chave de API é usada.
 // @ts-nocheck
 import REGRAS from '@/lib/oracle/data/regras.json';
 import LIVROS from '@/lib/oracle/data/livros.json';
@@ -316,21 +382,23 @@ export type PromptInput = {
   char: Record<string, any>;
   caso: Record<string, any>;
   cena: string;
-  /** PdDs em cena, ja' formatados pelo cliente via fmtNpc(). */
+  /** PdDs em cena, já formatados pelo cliente via fmtNpc(). */
   naCena: string[];
-  /** Quando a resposta e' a fala de um PdD. */
+  /** Quando a resposta é a fala de um PdD. */
   npc?: { n: string; perfil: string } | null;
+  /** Resumo rolante da crônica, quando já existe (memória longa). */
+  resumo?: string;
   prefs: { tamanhoNarracao?: string; modeloIA?: string };
   book: BookText;
 };
 
-/** Do prelude do artifact (linha 20), usado na descricao da ficha. */
+/** Do prelúdio do artifact, usado na descrição da ficha. */
 const stateOf = (v: number, kind: string) =>
   kind === 'saude'
     ? v > 0 ? 'Inteiro' : v > -6 ? 'Ferido' : v > -12 ? 'Gravemente ferido' : 'Morto'
     : v > 0 ? 'Inteiro' : v > -6 ? 'Abalado' : v > -12 ? 'Marcado' : 'Quebrado';
 
-/** Era metodo da classe; aqui recebe as pistas do caso. */
+/** Era método da classe; aqui recebe as pistas do caso. */
 function fioTxt(f: any, i: number, pistas: any[]) {
   const a = (pistas || []).find((p: any) => p.id === f.a);
   const b = (pistas || []).find((p: any) => p.id === f.b);
@@ -340,14 +408,12 @@ function fioTxt(f: any, i: number, pistas: any[]) {
 /**
  * Monta o prompt de sistema do narrador.
  *
- * Devolve as duas metades separadas de proposito: \`stable\` e' identico entre
- * turnos da mesma cronica na mesma regiao (~7.100 tokens) e por isso recebe
+ * Devolve as duas metades separadas de propósito: \`stable\` é idêntico entre
+ * turnos da mesma crônica na mesma região (~7.100 tokens) e por isso recebe
  * cache_control no adapter da Anthropic; \`volatile\` muda a cada turno.
  */
 export function buildSystemPrompt(input: PromptInput): { stable: string; volatile: string; full: string } {
-  const { era, char, caso, cena, naCena, npc, prefs, book } = input;
-  const full = systemPromptBody({ era, char, caso, cena, naCena, npc, prefs, book });
-  // O corte e' feito no marcador que separa cenario (estavel) de ficha (volatil).
+  const full = systemPromptBody(input);
   const MARK = '\\nFICHA DO PERSONAGEM:';
   const at = full.indexOf(MARK);
   if (at < 0) return { stable: full, volatile: '', full };
@@ -362,8 +428,9 @@ ${body}
 
 writeFileSync('lib/server/prompt.ts', prompt);
 
-console.log('HEAD  linhas 21-141  :', HEAD.split('\n').length);
-console.log('TAIL  linhas 212-572 :', TAIL.split('\n').length);
-console.log('systemPrompt 144-195 : -> lib/server/prompt.ts (' + SUBS.length + ' substituicoes)');
-console.log('saida lib/oracle/logic.tsx :', out.length, 'bytes');
-console.log('saida lib/server/prompt.ts :', prompt.length, 'bytes');
+console.log('prelúdio    : linhas 1-' + (L_CLASSE - 1), `(${PRELUDE_ORIG.split('\n').length} linhas, verbatim)`);
+console.log('HEAD        : linhas ' + L_CLASSE + '-' + (L_PROMPT - 1));
+console.log('systemPrompt: linhas ' + L_PROMPT + '-' + (L_NARRATE - 1) + ' -> lib/server/prompt.ts');
+console.log('TAIL        : linhas ' + L_INGEST + '-' + linhas.length);
+console.log('logic.tsx   :', out.length, 'bytes');
+console.log('prompt.ts   :', prompt.length, 'bytes');

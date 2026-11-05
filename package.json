@@ -6,14 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "gen": "node tools/extract-css.mjs && node tools/transpile-template.mjs && node tools/split-data.mjs",
+    "gen": "node tools/extract-css.mjs && node tools/transpile-template.mjs && node tools/split-data.mjs && node tools/port-logic.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "verify:pixel": "node tests/pixel/run.mjs",
     "migrate": "node tools/migrate.mjs",
     "test:smoke": "node tests/smoke.mjs",
     "handover": "node tools/handover.mjs",
-    "gen:env": "node tools/gen-env.mjs"
+    "gen:env": "node tools/gen-env.mjs",
+    "gen:assets": "node tools/sync-assets.mjs && node tools/fetch-gfonts.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

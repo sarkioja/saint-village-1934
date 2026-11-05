@@ -24,6 +24,11 @@ export type SaveShape = {
   era: string | null;
   tab: string;
   eras: Record<string, EraState>;
+  /** Câmera do mapa da cidade (zoom e pan). O v2 passou a persistir. */
+  mapZ?: number;
+  mapX?: number;
+  mapY?: number;
+  mapFz?: number;
 };
 
 export interface Store {

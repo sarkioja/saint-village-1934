@@ -28,11 +28,19 @@ const TAG_MAP = { 'sc-raw-select': 'select' };
 // Valores literais sao convertidos; expressoes passam direto (valor vem em runtime).
 const NUMERIC_ATTRS = new Set([
   'rows', 'cols', 'size', 'span', 'start', 'maxLength', 'minLength',
-  'tabIndex', 'colSpan', 'rowSpan', 'width', 'height',
+  'tabIndex', 'colSpan', 'rowSpan',
 ]);
+
+// `width` e `height` sao number no HTML (<img width="200">) mas aceitam unidade
+// no SVG (<filter width="112%">). Converte quando o valor e' um numero puro,
+// mantem string caso contrario — correto nos dois contextos, sem precisar saber
+// em qual deles o elemento esta'.
+const NUMERIC_OU_UNIDADE = new Set(['width', 'height']);
 const BOOLEAN_ATTRS = new Set([
   'draggable', 'disabled', 'checked', 'readOnly', 'required',
-  'multiple', 'autoFocus', 'hidden', 'autoPlay', 'controls', 'loop', 'muted',
+  // `open` chega como open="" em <details>: em HTML a presenca do atributo ja e'
+  // o valor; em React precisa ser o booleano.
+  'multiple', 'autoFocus', 'hidden', 'autoPlay', 'controls', 'loop', 'muted', 'open',
 ]);
 
 // Atributos HTML com nome diferente em React.
@@ -53,10 +61,9 @@ const ATTR_MAP = {
 // Assets que o artifact referenciava por UUID (do manifest empacotado) e que agora
 // sao servidos de /public. Toda ocorrencia precisa estar nesta tabela: um UUID de
 // 36 chars que sobre sem mapeamento faz o build falhar (ver checagem no fim).
-const ASSET_URLS = {
-  '3f407024-ced9-4ca3-bf36-8735fe0e5906': '/assets/city.png',
-  'aa21b305-5698-4e7e-a3c3-ab1c3b535120': '/assets/map.svg',
-};
+// Gerado por tools/sync-assets.mjs a partir do que o artifact realmente trouxe.
+// Nao escreva UUIDs a mao aqui: eles mudam a cada exportacao.
+const ASSET_URLS = JSON.parse(readFileSync('source/asset-map.json', 'utf8'));
 
 /** Troca UUID de asset por caminho servido, em qualquer valor (style, src, etc.). */
 function mapAssets(value) {
@@ -155,12 +162,20 @@ function emitStyle(raw, scope) {
     const v = interp(value, scope);
     parts.push(key === null ? `${JSON.stringify(prop)}: ${v}` : `${key}: ${v}`);
   }
-  return '{' + parts.join(', ') + '}';
+  // Propriedades customizadas (--d, --tab-bg) sao validas em runtime e o React
+  // as repassa, mas CSSProperties so conhece as padrao. O cast fica restrito aos
+  // objetos que de fato tem uma: todo o resto continua sendo checado pelo tsc.
+  const custom = parts.some((p) => p.startsWith('"--'));
+  return '{' + parts.join(', ') + '}' + (custom ? ' as React.CSSProperties' : '');
 }
 
 function emitAttrs(node, scope) {
   const out = [];
   let hoverClass = null;
+  // O v2 passou a usar class= e style-hover no MESMO elemento. Emitir os dois
+  // daria dois className no JSX — erro de compilacao, e em runtime o React
+  // ficaria so com o ultimo, perdendo as classes do template.
+  let classAttr = null;
 
   for (const [name, raw] of Object.entries(node.attribs)) {
     if (isHint(name)) continue;
@@ -181,6 +196,17 @@ function emitAttrs(node, scope) {
       continue;
     }
 
+    // Demais sc-camel-*: atributo em camelCase. E' assim que os atributos de SVG
+    // chegam, porque o HTML os minuscula e o React os quer camelCase:
+    //   sc-camel-view-box       -> viewBox
+    //   sc-camel-base-frequency -> baseFrequency
+    //   sc-camel-std-deviation  -> stdDeviation
+    if (name.startsWith('sc-camel-')) {
+      const attr = name.slice('sc-camel-'.length).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      out.push(`${attr}={${interp(raw, scope)}}`);
+      continue;
+    }
+
     if (name === 'style') {
       out.push(`style={${emitStyle(raw, scope)}}`);
       continue;
@@ -193,8 +219,18 @@ function emitAttrs(node, scope) {
 
     const reactName = ATTR_MAP[name] || name;
 
+    if (reactName === 'className') {
+      classAttr = interp(raw, scope);
+      continue;
+    }
+
     // Literal numerico/booleano: converte. Com `{{ }}`, deixa o valor de runtime.
     if (!raw.includes('{{')) {
+      if (NUMERIC_OU_UNIDADE.has(reactName)) {
+        const t = raw.trim();
+        out.push(/^-?\d+(\.\d+)?$/.test(t) ? `${reactName}={${Number(t)}}` : `${reactName}=${JSON.stringify(t)}`);
+        continue;
+      }
       if (NUMERIC_ATTRS.has(reactName)) {
         if (!/^-?\d+(\.\d+)?$/.test(raw.trim())) {
           throw new Error(`${reactName} nao e' numerico: ${JSON.stringify(raw)}`);
@@ -215,7 +251,13 @@ function emitAttrs(node, scope) {
     out.push(`${reactName}={${interp(raw, scope)}}`);
   }
 
-  if (hoverClass) out.push(`className=${JSON.stringify(hoverClass)}`);
+  if (classAttr && hoverClass) {
+    out.push('className={' + classAttr + ' + ' + JSON.stringify(' ' + hoverClass) + '}');
+  } else if (classAttr) {
+    out.push('className={' + classAttr + '}');
+  } else if (hoverClass) {
+    out.push(`className=${JSON.stringify(hoverClass)}`);
+  }
   return out.length ? ' ' + out.join(' ') : '';
 }
 
@@ -335,6 +377,18 @@ writeFileSync(
 
 // ---------------------------------------------------------------- invariantes
 
+// Nenhum atributo ou elemento do runtime antigo pode sobrar: um `sc-camel-x`
+// que escape vira atributo desconhecido no DOM, que o React descarta em
+// silencio — e o efeito simplesmente nao acontece, sem erro nenhum.
+const sobrou = tsx.match(/\bsc-[a-z-]+=/g);
+if (sobrou) {
+  throw new Error('atributo sc-* nao traduzido: ' + [...new Set(sobrou)].join(', '));
+}
+const tagSobrou = tsx.match(/<sc-[a-z-]+/g);
+if (tagSobrou) {
+  throw new Error('elemento sc-* nao traduzido: ' + [...new Set(tagSobrou)].join(', '));
+}
+
 // Um UUID de asset que escape do mapeamento vira um 404 silencioso (foi o que
 // aconteceu com a imagem de fundo da tela de eras na primeira versao). Falha alto.
 const leftover = tsx.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g);
@@ -363,6 +417,8 @@ const report = {
   'handlers no template': count(/sc-camel-on-/g),
   'handlers emitidos': (tsx.match(/\bon[A-Z][A-Za-z]*=\{/g) || []).length,
   'sc-raw-select -> select': count(/<sc-raw-select[\s>]/g),
+  'atributos sc-camel-* (nao-evento)': count(/sc-camel-(?!on-)[a-z-]+=/g),
+  'elementos SVG no DOM': (tsx.match(/<(svg|defs|filter|fe[A-Z][A-Za-z]*|animate|linearGradient|stop|path|rect|g)[\s/>]/g) || []).length,
 };
 for (const [k, n] of Object.entries(report)) console.log(String(n).padStart(5), k);
 

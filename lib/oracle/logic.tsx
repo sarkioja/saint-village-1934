@@ -1,9 +1,9 @@
 // GENERATED por tools/port-logic.mjs a partir de source/component.js — NAO EDITAR A MAO.
 //
-// O corpo desta classe e' o motor de regras do artifact original, copiado verbatim.
-// ts-nocheck e' deliberado: o porte e' validado pelo diff de pixels (tests/pixel) e
-// pelos testes de unidade do parser de marcacoes, nao pelo compilador. Todo codigo
-// NOVO do projeto (rotas, store, auth) e' tipado normalmente.
+// O prelúdio e o corpo desta classe são o motor do artifact original, copiados
+// verbatim. ts-nocheck é deliberado: o porte é validado pelo diff de pixels
+// (tests/pixel) e pelos testes das marcações, não pelo compilador. Todo código
+// NOVO do projeto (rotas, store, auth, automações) é tipado normalmente.
 // @ts-nocheck
 'use client';
 
@@ -12,19 +12,96 @@ import OracleView from '@/components/generated/OracleView';
 import REGRAS from './data/regras.json';
 import LIVROS from './data/livros.json';
 import SECULO from './data/seculo.json';
+import { lerExtensoes, aplicarExtensoes, stripMarks } from './extensions';
 import type { Store, SaveShape } from './store';
 
-// ---- os globais do artifact, agora modulos ----------------------------------
-const R = () => REGRAS as any;
-const L = () => LIVROS as any;
-const S = () => SECULO as any;
+type Props = {
+  /** Persistência: localStorage na demo, API na conta. */
+  store: Store;
+  /** Estado inicial já carregado (SSR ou localStorage). */
+  initial: SaveShape | null;
+  /** Preferências do narrador, antes props fixos do artifact. */
+  tamanhoNarracao?: 'curto' | 'medio' | 'longo';
+  modeloIA?: 'haiku' | 'sonnet';
+  /** Quantas entradas do log vão como histórico (o servidor impõe o teto). */
+  historyTurns?: number;
+  /** Mensagem exibida quando a cota diária estoura. */
+  onQuota?: (msg: string) => void;
+};
 
-// ---- prelude do artifact (linhas 1-20), preservado -------------------------
-const TABS = [['cronica','Crônica'],['caso','Caso'],['ficha','Ficha'],['dados','Dados'],['elenco','Elenco'],['cidade','Cidade'],['seculo','Século'],['tutorial','Como jogar']];
+
+const LS = 'sv-cronica-v2';
+const TABS = [['cronica','Crônica'],['caso','Caso'],['ficha','Ficha'],['elenco','Elenco'],['cidade','Cidade'],['seculo','Século'],['tutorial','Como jogar']];
+const R = () => REGRAS as any, L = () => LIVROS as any, S = () => SECULO as any;
 const ERAS = ['1934','1946','1974','1994','1999'];
 const modsOf = e => (R() && R()[e] && R()[e].mods) || [];
 const triCount = fios => { const E=new Set(), V=new Set(); (fios||[]).filter(f=>f.st==='firme').forEach(f=>{E.add(f.a+'|'+f.b);E.add(f.b+'|'+f.a);V.add(f.a);V.add(f.b);}); const v=[...V]; let n=0; for(let i=0;i<v.length;i++)for(let j=i+1;j<v.length;j++)for(let k=j+1;k<v.length;k++) if(E.has(v[i]+'|'+v[j])&&E.has(v[j]+'|'+v[k])&&E.has(v[i]+'|'+v[k])) n++; return n; };
-const rnd = n => 1 + Math.floor(Math.random()*n);
+const SV_ROLLS = [];
+const rnd = n => { const v = 1 + Math.floor(Math.random()*n); if(SV_ROLLS.length<40) SV_ROLLS.push({n,v}); return v; };
+const SV_PIPS = {1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function svToast(msg){
+  try{
+    const old=document.querySelector('.sv-toast'); if(old) old.remove();
+    const el=document.createElement('div'); el.className='sv-toast'; el.setAttribute('role','status'); el.textContent=msg;
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) el.style.animation='none';
+    document.body.appendChild(el); setTimeout(()=>el.remove(),2300);
+  }catch(e){}
+}
+function svThrowDice(rolls){
+  try{
+    if(!rolls.length) return;
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let stage=document.getElementById('svd-stage');
+    if(stage) stage.remove();
+    stage=document.createElement('div'); stage.id='svd-stage'; stage.className='svd-stage';
+    document.body.appendChild(stage);
+    const W=window.innerWidth, H=window.innerHeight;
+    const n=Math.min(rolls.length,10), S=n>4?54:n>1?64:78;
+    const tx=W*(0.22+Math.random()*0.56), ty=H*(0.30+Math.random()*0.45);
+    const fromLeft=Math.random()<0.5;
+    const FACE={1:[0,0],6:[0,180],3:[0,-90],4:[0,90],2:[-90,0],5:[90,0]};
+    const dur=1500;
+    rolls.slice(0,10).forEach((r,i)=>{
+      const ang=i*2.4, rad=n>1?S*0.62*Math.sqrt(i+0.6):0;
+      const ex=tx+Math.cos(ang)*rad-S/2, ey=ty+Math.sin(ang)*rad-S/2;
+      const sx=fromLeft?-S*2-Math.random()*80:W+S+Math.random()*80, sy=H*(0.55+Math.random()*0.5);
+      const sh=document.createElement('div'); sh.className='svd-shadow'; sh.style.setProperty('--s',S+'px');
+      const wrap=document.createElement('div'); wrap.className='svd-wrap'; wrap.style.setProperty('--s',S+'px');
+      const cube=document.createElement('div'); cube.className=r.n===6?'svd-cube':'svd-chip';
+      if(r.n===6){
+        const core=['','rotateY(90deg)','rotateX(90deg)'].map(tf=>'<div class="svd-core" style="transform:'+tf+'"></div>').join('');
+        const faces=[[1,'translateZ(var(--h))'],[6,'rotateY(180deg) translateZ(var(--h))'],[3,'rotateY(90deg) translateZ(var(--h))'],[4,'rotateY(-90deg) translateZ(var(--h))'],[2,'rotateX(90deg) translateZ(var(--h))'],[5,'rotateX(-90deg) translateZ(var(--h))']]
+          .map(([v,tf])=>'<div class="svd-face" style="transform:'+tf+'">'+Array.from({length:9},(_,k)=>'<span class="svd-pip'+(SV_PIPS[v].includes(k)?(v===1?' on red':' on'):'')+'"></span>').join('')+'</div>').join('');
+        cube.innerHTML=core+faces; cube.style.setProperty('--h',(S/2)+'px');
+      } else {
+        cube.innerHTML='<div class="svd-chipface">'+r.v+'</div><div class="svd-chipface back">'+r.v+'</div>';
+      }
+      wrap.appendChild(cube); stage.appendChild(sh); stage.appendChild(wrap);
+      const L=(a,b,p)=>a+(b-a)*p;
+      const path=[[0,0,1.9],[.40,.78,1],[.56,.9,1.24],[.72,.97,1],[.82,.99,1.08],[.9,1,1],[1,1,1]];
+      const d=i*45;
+      wrap.animate(path.map(([o,p,sc],k)=>({offset:o,transform:`translate(${L(sx,ex,p)}px,${L(sy,ey,p)}px) scale(${sc})`,easing:k%2===0?'cubic-bezier(.4,0,.9,.6)':'cubic-bezier(.1,.4,.6,1)'})),{duration:dur,delay:d,fill:'both'});
+      sh.animate(path.map(([o,p,sc])=>{ const h=sc-1; return {offset:o,transform:`translate(${L(sx,ex,p)+6+h*70}px,${L(sy,ey,p)+10+h*90}px) scale(${1+h*0.55})`,opacity:Math.max(0.25,0.9-h*0.9),filter:`blur(${4+h*14}px)`}; }),{duration:dur,delay:d,fill:'both'});
+      const rz=Math.round(Math.random()*360-180);
+      if(r.n===6){
+        const [fx,fy]=FACE[r.v];
+        const kx=(2+Math.floor(Math.random()*2))*360*(Math.random()<.5?-1:1), ky=(3+Math.floor(Math.random()*2))*360*(Math.random()<.5?-1:1);
+        cube.animate([
+          {offset:0,transform:`rotateZ(${rz+400}deg) rotateX(${fx+kx}deg) rotateY(${fy+ky}deg)`},
+          {offset:.4,transform:`rotateZ(${rz+120}deg) rotateX(${fx+kx*0.3}deg) rotateY(${fy+ky*0.35}deg)`},
+          {offset:.75,transform:`rotateZ(${rz+14}deg) rotateX(${fx+(kx>0?28:-28)}deg) rotateY(${fy+(ky>0?22:-22)}deg)`},
+          {offset:.9,transform:`rotateZ(${rz}deg) rotateX(${fx}deg) rotateY(${fy}deg)`},
+          {offset:1,transform:`rotateZ(${rz}deg) rotateX(${fx}deg) rotateY(${fy}deg)`}
+        ],{duration:dur,delay:d,fill:'both',easing:'cubic-bezier(.2,.6,.3,1)'});
+      } else {
+        cube.animate([{transform:`rotateZ(${rz+900}deg) rotateY(1440deg)`},{offset:.9,transform:`rotateZ(${rz}deg) rotateY(0deg)`},{transform:`rotateZ(${rz}deg) rotateY(0deg)`}],{duration:dur,delay:d,fill:'both',easing:'cubic-bezier(.2,.6,.3,1)'});
+      }
+    });
+    const kill=()=>{ if(!stage.isConnected) return; stage.animate([{opacity:1},{opacity:0}],{duration:450,fill:'forwards'}).onfinish=()=>stage.remove(); };
+    stage.addEventListener('click',kill);
+    stage._t=setTimeout(kill,dur+3800);
+  }catch(e){}
+}
 const pick = a => a[Math.floor(Math.random()*a.length)];
 const uid = () => Math.random().toString(36).slice(2,9);
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
@@ -34,35 +111,9 @@ function invList(era){ const r=R(); return [...r.comum.invAcad, ...r.comum.invIn
 function blankChar(era){ const inv={}; invList(era).forEach(k=>inv[k]=1); return {nome:'',conceito:'',arq:'',ori:'',mot:'',lado:'Contrato',inv,esp:[],saude:8,sf:8,med:7,imp:4,adr:1,vicioTr:0,imprensa:0,ficha:0,ruido:0,medalha:'',anoNasc:'',lacoEra:'',lacoDe:'',herancas:'',testamento:'',antepassado:'',regras:'',fontes:'',vicio:'',segredo:'',equip:'',notas:''}; }
 function blankCaso(){ return {titulo:'',premissa:'',segredo:'',pistas:[],provas:[],vant:[],prob:[],nec:4,fios:[],medalhaUsos:0,flash:false,jaVi:false}; }
 function blankEra(era){ return {char:blankChar(era),log:[],caso:blankCaso(),cena:'',naCena:[],custom:[]}; }
+function load(){ try{ const s=JSON.parse(localStorage.getItem(LS)); if(s&&s.eras) return s; }catch(e){} return null; }
 const stateOf = (v,kind) => kind==='saude' ? (v>0?'Inteiro':v>-6?'Ferido':v>-12?'Gravemente ferido':'Morto') : (v>0?'Inteiro':v>-6?'Abalado':v>-12?'Marcado':'Quebrado');
 
-// ---- props -----------------------------------------------------------------
-type Props = {
-  /** Persistencia: localStorage na demo, API na conta. */
-  store: Store;
-  /** Estado inicial ja' carregado (SSR ou localStorage). */
-  initial: SaveShape | null;
-  /** Preferencias do narrador, antes props fixos do artifact. */
-  tamanhoNarracao?: 'curto' | 'medio' | 'longo';
-  modeloIA?: 'haiku' | 'sonnet';
-  /** Quantas entradas do log vao como historico (botao de custo; padrao 18 = original). */
-  historyTurns?: number;
-  /** Mensagem exibida quando a cota diaria estoura. */
-  onQuota?: (msg: string) => void;
-};
-
-
-/**
- * Durante o stream, remove marcacoes completas e qualquer marcacao parcial no fim
- * do buffer, para que nada como "[PIST" apareca na tela.
- */
-export function stripMarks(t: string): string {
-  return t
-    .replace(/\[[^\[\]]{1,240}\]/g, '')
-    .replace(/\[[^\[\]]{0,240}$/, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n');
-}
 
 export default class OracleLogic extends React.Component<Props, any> {
   state = Object.assign({ era:null, tab:'cronica', eras:{} }, this.props.initial||{}, {
@@ -75,13 +126,14 @@ export default class OracleLogic extends React.Component<Props, any> {
   mapVpRef = el => { if(this.mapVp===el) return; if(this.mapVp) this.mapVp.removeEventListener('wheel',this.onMapWheel); this.mapVp=el; if(el){ el.addEventListener('wheel',this.onMapWheel,{passive:false}); setTimeout(()=>{ const s=this.state; const v=this.mapSet(s.mapZ==null?0:s.mapZ, s.mapX||0, s.mapY||0); if(v) this.mapApply(v,true); },0); } };
   mapInRef = el => { this.mapInEl = el; };
   mapSet(z,x,y){ const el=this.mapVp; if(!el) return null; const W=el.clientWidth, H=el.clientHeight; if(!W||!H) return null; const fz=Math.min(1,H/W); z=Math.max(fz,Math.min(6,z)); const cw=W*z, ch=W*z; x = cw<=W ? (W-cw)/2 : Math.min(0,Math.max(W-cw,x)); y = ch<=H ? (H-ch)/2 : Math.min(0,Math.max(H-ch,y)); return {z,x,y,fz}; }
-  mapApply(v,commit){ if(this.mapInEl){ this.mapInEl.style.transform=`translate(${v.x}px,${v.y}px)`; this.mapInEl.style.width=(v.z*100)+'%'; } if(commit) this.setState({mapZ:v.z,mapX:v.x,mapY:v.y,mapFz:v.fz}); }
+  mapApply(v,commit){ if(this.mapInEl){ this.mapInEl.style.transform=`translate(${v.x}px,${v.y}px)`; this.mapInEl.style.width=(v.z*100)+'%'; } if(commit) this.setState({mapZ:v.z,mapX:v.x,mapY:v.y,mapFz:v.fz},()=>this.save()); }
   mapZoomAt(f,px,py){ const s=this.state, z=s.mapZ||1, x=s.mapX||0, y=s.mapY||0; const v0=this.mapSet(z*f,0,0); if(!v0) return; const k=v0.z/z; const v=this.mapSet(v0.z, px-(px-x)*k, py-(py-y)*k); if(v) this.mapApply(v,true); }
   mapZoomCenter(f){ const el=this.mapVp; if(el) this.mapZoomAt(f, el.clientWidth/2, el.clientHeight/2); }
   onMapWheel = ev => { ev.preventDefault(); const r=this.mapVp.getBoundingClientRect(); this.mapZoomAt(Math.exp(-ev.deltaY*0.0018), ev.clientX-r.left, ev.clientY-r.top); };
-  onMapDown = ev => { if(ev.pointerType==='mouse' && ev.button!==0) return; if(ev.target.closest && ev.target.closest('[data-maplabel]')) return; this._mapDrag={id:ev.pointerId,sx:ev.clientX,sy:ev.clientY,x:this.state.mapX||0,y:this.state.mapY||0,v:null}; try{ ev.currentTarget.setPointerCapture(ev.pointerId); }catch(e){} if(this.mapVp) this.mapVp.style.cursor='grabbing'; };
-  onMapMove = ev => { const d=this._mapDrag; if(!d||d.id!==ev.pointerId) return; const v=this.mapSet(this.state.mapZ||1, d.x+ev.clientX-d.sx, d.y+ev.clientY-d.sy); if(v){ d.v=v; this.mapApply(v,false); } };
-  onMapUp = ev => { const d=this._mapDrag; if(!d) return; this._mapDrag=null; if(this.mapVp) this.mapVp.style.cursor='grab'; if(d.v) this.mapApply(d.v,true); };
+  _ptrs = new Map(); _pinch = null;
+  onMapDown = ev => { this._ptrs.set(ev.pointerId,{x:ev.clientX,y:ev.clientY}); if(this._ptrs.size===2){ const [p,q]=[...this._ptrs.values()]; this._pinch={d:Math.hypot(p.x-q.x,p.y-q.y)||1,z:this.state.mapZ||1}; this._mapDrag=null; try{ ev.currentTarget.setPointerCapture(ev.pointerId); }catch(e){} return; } if(ev.pointerType==='mouse' && ev.button!==0) return; if(ev.target.closest && ev.target.closest('[data-maplabel]')) return; this._mapDrag={id:ev.pointerId,sx:ev.clientX,sy:ev.clientY,x:this.state.mapX||0,y:this.state.mapY||0,v:null}; try{ ev.currentTarget.setPointerCapture(ev.pointerId); }catch(e){} if(this.mapVp) this.mapVp.style.cursor='grabbing'; };
+  onMapMove = ev => { if(this._ptrs.has(ev.pointerId)) this._ptrs.set(ev.pointerId,{x:ev.clientX,y:ev.clientY}); if(this._pinch && this._ptrs.size===2 && this.mapVp){ const [p,q]=[...this._ptrs.values()]; const r=this.mapVp.getBoundingClientRect(); const nd=Math.hypot(p.x-q.x,p.y-q.y); const target=this._pinch.z*nd/this._pinch.d; const cur=this.state.mapZ||1; this.mapZoomAt(target/cur,(p.x+q.x)/2-r.left,(p.y+q.y)/2-r.top); return; } const d=this._mapDrag; if(!d||d.id!==ev.pointerId) return; const v=this.mapSet(this.state.mapZ||1, d.x+ev.clientX-d.sx, d.y+ev.clientY-d.sy); if(v){ d.v=v; this.mapApply(v,false); } };
+  onMapUp = ev => { this._ptrs.delete(ev.pointerId); if(this._ptrs.size<2) this._pinch=null; const d=this._mapDrag; if(!d) return; this._mapDrag=null; if(this.mapVp) this.mapVp.style.cursor='grab'; if(d.v) this.mapApply(d.v,true); };
   mapVals(s,era,d,SS,goRegion){
     const POS={'White Hills':[53.8,31.1],'Downtown':[68.9,31.8],'Chinatown':[65.3,28.3],'Saint Edwiges':[63.4,24.1],'Embarcadouro':[71.4,26.5],'Embarcadouro e Píer 9':[71.4,26.5],
       'Black Rock':[80.4,16.4],'Black Rock e a Ponte':[80.4,16.4],'Black Rock vazia':[80.4,16.4],'Monumental Island':[80.4,16.4],'Black Rock Bridge e o Pilar 3':[77.4,28.8],
@@ -99,8 +151,8 @@ export default class OracleLogic extends React.Component<Props, any> {
     const used=new Set(); const out=[];
     regs.forEach(r=>{ const p=POS[r.nome]; if(!p) return; used.add(KEY[r.nome]||r.nome); const sel=s.mapSel===r.nome; const cena=mEra===era&&d.cena===r.nome;
       out.push({real:true,ghost:false,n:r.nome,x:p[0],y:p[1],
-        bg:sel?'var(--sv-paper,#e9e3d3)':'rgba(7,7,7,0.82)', fg:sel?'var(--sv-bg,#0b0a09)':'var(--sv-ink,#ebe5d6)',
-        bd:cena?'var(--sv-accent2,#c8372b)':(sel?'var(--sv-paper,#e9e3d3)':'var(--sv-line2,#3a3631)'),
+        bg:sel?'var(--sv-paper,#dedede)':'rgba(15,15,16,0.82)', fg:sel?'var(--sv-bg,#131212)':'var(--sv-ink,#e0e0e0)',
+        bd:cena?'var(--sv-accent2,#8f9093)':(sel?'var(--sv-paper,#dedede)':'var(--sv-line2,#353639)'),
         pick:()=>this.setState({mapSel:sel?null:r.nome})}); });
     Object.entries(SS.camadas||{}).forEach(([k,v])=>{ if(used.has(k)) return; const p=POS[k]; if(!p||!v[camY]) return; out.push({real:false,ghost:true,n:k,t:v[camY],x:p[0],y:p[1]}); });
     const byEra=o=>o[mEra]||'';
@@ -144,33 +196,49 @@ export default class OracleLogic extends React.Component<Props, any> {
     this._themed=this.state.era; this.applyTheme(this.state.era);
     const check=()=>{ if(R()&&L()&&S()){ this.setState({ready:true}); } else this._t=setTimeout(check,80); };
     check();
+    this._onScroll=()=>{ try{ document.documentElement.classList.toggle('sv-scrolled', window.scrollY>80); if(!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)) document.documentElement.style.setProperty('--sv-py', Math.round(window.scrollY)+'px'); }catch(e){} };
+    window.addEventListener('scroll',this._onScroll,{passive:true});
+    try{ if(localStorage.getItem('sv-guide-off')) this.setState({guideOff:true}); }catch(e){}
   }
-  componentWillUnmount(){ clearTimeout(this._t); this.applyTheme(null); }
+  componentWillUnmount(){ clearTimeout(this._t); window.removeEventListener('scroll',this._onScroll); this.applyTheme(null); }
   applyTheme(era){
     const TH={
-      '1934':{"--sv-on-accent2":"#0a0a0a","--sv-accent2":"#d6d1c6","--sv-tab":"#d6d1c6","--sv-title":"#f2efe8","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #d6d1c6","--sv-bg":"#0a0a0a","--sv-bg1":"#1d1c1a","--sv-bg2":"#030303","--sv-ink":"#f2efe8","--sv-ink2":"#d8d3c8","--sv-paper":"#ebe7de","--sv-paperdim":"#55514a","--sv-accent":"#a3201a","--sv-hicard":"#ebe7de","--sv-accent-soft":"#e39a8f","--sv-panel":"#121211","--sv-panel2":"#0d0d0c","--sv-line":"#2a2826","--sv-line2":"#3d3a36","--sv-line3":"#1a1918","--sv-dim":"#a8a399","--sv-dim2":"#7f7a72","--sv-type":"'Special Elite',monospace","--sv-voice":"'Courier Prime',monospace"},
-      '1946':{"--sv-on-accent2":"#0a0a0a","--sv-accent2":"#d6d1c6","--sv-tab":"#d6d1c6","--sv-title":"#f2efe8","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #d6d1c6","--sv-bg":"#0a0a0a","--sv-bg1":"#1c1a18","--sv-bg2":"#040302","--sv-ink":"#f2efe8","--sv-ink2":"#d6d2c9","--sv-paper":"#e6e3dc","--sv-paperdim":"#55524c","--sv-accent":"#8e2a1c","--sv-hicard":"#e6e3dc","--sv-accent-soft":"#e39a8f","--sv-panel":"#121110","--sv-panel2":"#0d0c0b","--sv-line":"#2a2826","--sv-line2":"#3e3b37","--sv-line3":"#1a1918","--sv-dim":"#aaa59c","--sv-dim2":"#7f7b74","--sv-type":"'Special Elite',monospace","--sv-voice":"'Courier Prime',monospace"},
-      '1974':{"--sv-on-accent2":"#0a0a0a","--sv-accent2":"#d6d1c6","--sv-tab":"#d6d1c6","--sv-title":"#f2efe8","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #d6d1c6","--sv-bg":"#0a0a0a","--sv-bg1":"#1b1a19","--sv-bg2":"#030302","--sv-ink":"#f2efe8","--sv-ink2":"#d6d2c9","--sv-paper":"#e4e2dc","--sv-paperdim":"#55524c","--sv-accent":"#a3201a","--sv-hicard":"#e4e2dc","--sv-accent-soft":"#e39a8f","--sv-panel":"#121211","--sv-panel2":"#0d0d0c","--sv-line":"#2a2826","--sv-line2":"#3e3b37","--sv-line3":"#1a1918","--sv-dim":"#aaa59c","--sv-dim2":"#7f7b74","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Courier Prime',monospace"},
-      '1994':{"--sv-on-accent2":"#0a0a0a","--sv-accent2":"#d6d1c6","--sv-tab":"#d6d1c6","--sv-title":"#f2efe8","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #d6d1c6","--sv-bg":"#0b0809","--sv-bg1":"#2e0b10","--sv-bg2":"#030202","--sv-ink":"#f3eee7","--sv-ink2":"#dbd3c9","--sv-paper":"#ece6dc","--sv-paperdim":"#574d45","--sv-accent":"#d41f27","--sv-hicard":"#ece6dc","--sv-accent-soft":"#ff8f8f","--sv-panel":"#141011","--sv-panel2":"#0e0b0c","--sv-line":"#2d2426","--sv-line2":"#463739","--sv-line3":"#1c1617","--sv-dim":"#b1a69e","--sv-dim2":"#847a73","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Courier Prime',monospace"},
-      '1999':{"--sv-on-accent2":"#0a0a0a","--sv-accent2":"#d6d1c6","--sv-tab":"#d6d1c6","--sv-title":"#f2efe8","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #d6d1c6","--sv-bg":"#090b0e","--sv-bg1":"#0f232b","--sv-bg2":"#020304","--sv-ink":"#eef0f1","--sv-ink2":"#cdd3d7","--sv-paper":"#e7e8e6","--sv-paperdim":"#4b525a","--sv-accent":"#c4161c","--sv-hicard":"#e7e8e6","--sv-accent-soft":"#ff9b8f","--sv-panel":"#101317","--sv-panel2":"#0c0e11","--sv-line":"#232a33","--sv-line2":"#36404b","--sv-line3":"#171c22","--sv-dim":"#a3adb6","--sv-dim2":"#77818b","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Courier Prime',monospace"}
+      '1934':{"--sv-on-accent2":"#121213","--sv-accent2":"#b8b8b8","--sv-tab":"#b8b8b8","--sv-title":"#f3f3f3","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #b8b8b8","--sv-bg":"#121213","--sv-bg1":"#252423","--sv-bg2":"#0b0b0c","--sv-ink":"#d4d4d4","--sv-ink2":"#b6b6b6","--sv-paper":"#e4e4e4","--sv-paperdim":"#595a5d","--sv-accent":"#5e5e5e","--sv-hicard":"#e4e4e4","--sv-accent-soft":"#b9b9b9","--sv-panel":"#161618","--sv-panel2":"#111113","--sv-line":"#2b2b2e","--sv-line2":"#434347","--sv-line3":"#1d1d1f","--sv-dim":"#959699","--sv-dim2":"#808186","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Special Elite',monospace"},
+      '1946':{"--sv-on-accent2":"#121213","--sv-accent2":"#b8b8b8","--sv-tab":"#b8b8b8","--sv-title":"#f3f3f3","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #b8b8b8","--sv-bg":"#121213","--sv-bg1":"#212225","--sv-bg2":"#0c0b0b","--sv-ink":"#d4d4d4","--sv-ink2":"#b6b6b6","--sv-paper":"#e0e0e0","--sv-paperdim":"#595a5d","--sv-accent":"#555555","--sv-hicard":"#e0e0e0","--sv-accent-soft":"#b9b9b9","--sv-panel":"#161618","--sv-panel2":"#111113","--sv-line":"#2b2b2e","--sv-line2":"#434347","--sv-line3":"#1d1d1f","--sv-dim":"#959699","--sv-dim2":"#808186","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Special Elite',monospace"},
+      '1974':{"--sv-on-accent2":"#121213","--sv-accent2":"#b8b8b8","--sv-tab":"#b8b8b8","--sv-title":"#f3f3f3","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #b8b8b8","--sv-bg":"#121213","--sv-bg1":"#232222","--sv-bg2":"#0b0b0b","--sv-ink":"#d4d4d4","--sv-ink2":"#b6b6b6","--sv-paper":"#e0e0e0","--sv-paperdim":"#595a5d","--sv-accent":"#5e5e5e","--sv-hicard":"#e0e0e0","--sv-accent-soft":"#b9b9b9","--sv-panel":"#161618","--sv-panel2":"#111113","--sv-line":"#2b2b2e","--sv-line2":"#434347","--sv-line3":"#1d1d1f","--sv-dim":"#959699","--sv-dim2":"#808186","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Courier Prime',monospace"},
+      '1994':{"--sv-on-accent2":"#121213","--sv-accent2":"#b8b8b8","--sv-tab":"#b8b8b8","--sv-title":"#f3f3f3","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #b8b8b8","--sv-bg":"#131012","--sv-bg1":"#1c1c1c","--sv-bg2":"#0b0a0b","--sv-ink":"#d4d4d4","--sv-ink2":"#b6b6b6","--sv-paper":"#e4e4e4","--sv-paperdim":"#4e4f52","--sv-accent":"#7a7a7a","--sv-hicard":"#e4e4e4","--sv-accent-soft":"#c7c7c7","--sv-panel":"#161618","--sv-panel2":"#111113","--sv-line":"#2b2b2e","--sv-line2":"#434347","--sv-line3":"#1d1d1f","--sv-dim":"#959699","--sv-dim2":"#808186","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Courier Prime',monospace"},
+      '1999':{"--sv-on-accent2":"#121213","--sv-accent2":"#b8b8b8","--sv-tab":"#b8b8b8","--sv-title":"#f3f3f3","--sv-display":"'Bebas Neue',sans-serif","--sv-hb":"1px solid #b8b8b8","--sv-bg":"#111317","--sv-bg1":"#172b34","--sv-bg2":"#0a0b0d","--sv-ink":"#d4d4d4","--sv-ink2":"#b6b6b6","--sv-paper":"#cccccc","--sv-paperdim":"#535a63","--sv-accent":"#6d6d6d","--sv-hicard":"#cccccc","--sv-accent-soft":"#c7c7c7","--sv-panel":"#161618","--sv-panel2":"#111113","--sv-line":"#2b2b2e","--sv-line2":"#434347","--sv-line3":"#1d1d1f","--sv-dim":"#959699","--sv-dim2":"#808186","--sv-type":"'Courier Prime',monospace","--sv-voice":"'Courier Prime',monospace"}
     };
     const keys=Object.keys(TH['1994']), T=TH[era], st=document.documentElement.style;
     keys.forEach(k=> T ? st.setProperty(k,T[k]) : st.removeProperty(k));
     document.body.style.background = T ? T['--sv-bg'] : '';
   }
   componentDidUpdate(pp, ps){
+    try{
+      const A=ps.era===this.state.era?this.cur(ps):null, B=this.cur();
+      if(A&&B){
+        const ca=A.caso||{}, cb=B.caso||{};
+        if((cb.pistas||[]).length>(ca.pistas||[]).length) svToast('Pista anotada');
+        else if((cb.provas||[]).length>(ca.provas||[]).length) svToast('Prova registrada');
+        else if((cb.fios||[]).length>(ca.fios||[]).length) svToast('Fio ligado no mural');
+        else if((B.custom||[]).length>(A.custom||[]).length) svToast('Novo nome no elenco');
+        else if(B.cena!==A.cena && B.cena) svToast('Cena: '+B.cena);
+      }
+      if(ps.diceRes && this.state.diceRes && ps.diceRes.title===this.state.diceRes.title && !ps.diceRes.logged && this.state.diceRes.logged) svToast('Registrado na crônica');
+    }catch(e){}
+    if(ps.diceRes!==this.state.diceRes && this.state.diceRes && SV_ROLLS.length){ const r=SV_ROLLS.splice(0).filter(x=>x.n===6||x.n===8).slice(0,10); if(r.length){ svThrowDice(r); this.setState({lastRolls:r}); } } else if(ps.diceRes===this.state.diceRes){ SV_ROLLS.length=0; }
     if(this._themed!==this.state.era){ this._themed=this.state.era; this.applyTheme(this.state.era); }
     const el=this.logRef.current; const a=this.cur(ps), b=this.cur();
     if(el && (ps.busy!==this.state.busy || (a&&b&&a.log.length!==b.log.length) || ps.tab!==this.state.tab)) el.scrollTop=el.scrollHeight;
   }
-  save(){ const {era,tab,eras}=this.state; this.props.store.write({era,tab,eras}); }
+  save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz}=this.state; this.props.store.write({era,tab,eras,mapZ,mapX,mapY,mapFz}); }
   cur(s=this.state){ return s.era && s.eras ? s.eras[s.era] : null; }
   upd(fn){ this.setState(s=>{ const eras={...s.eras}; eras[s.era]=fn({...eras[s.era]}); return {eras}; }, ()=>this.save()); }
   setChar(patch){ this.upd(e=>({...e,char:{...e.char,...(typeof patch==='function'?patch(e.char):patch)}})); }
   setCaso(patch){ this.upd(e=>({...e,caso:{...e.caso,...(typeof patch==='function'?patch(e.caso):patch)}})); }
   addLog(entry){ const id=uid(); this.upd(e=>({...e,log:[...e.log,{id,...entry}]})); return id; }
   patchEntry(id, patch){ this.upd(e=>({...e,log:e.log.map(x=>x.id===id?{...x,...patch}:x)})); }
-  setTab(tab){ this.setState({tab},()=>this.save()); }
+  setTab(tab){ if(tab==='dados') tab='cronica'; this.setState({tab},()=>this.save()); }
   pickEra(era){ this.setState(s=>{ const eras={...s.eras}; if(!eras[era]) eras[era]=blankEra(era); return {era, eras, tab: eras[era].log.length?'cronica':'tutorial'}; },()=>this.save()); }
 
   allNpcs(){ const d=this.cur(); const book=(L()[this.state.era].npcs||[]).map((n,i)=>({...n,id:'b'+i})); const mine=(d.custom||[]).map(n=>({...n,id:'c'+n.cid,custom:true,r:n.r||'Criado por você'})); return [...book,...mine]; }
@@ -186,14 +254,7 @@ export default class OracleLogic extends React.Component<Props, any> {
   matchSkill(v){ const era=this.state.era, all=[...R()[era].gerais, ...invList(era)]; const n=norm(v); return all.find(k=>norm(k)===n) || all.find(k=>n.includes(norm(k))||norm(k).includes(n)) || v; }
   isGeral(k){ return R()[this.state.era].gerais.includes(k); }
 
-  /**
-   * Pede uma narracao ao servidor. O prompt de sistema (com o texto do livro) e'
-   * montado em lib/server/prompt.ts; o cliente manda apenas o estado do jogo.
-   *
-   * A prosa chega em stream para aparecer na tela conforme sai, mas as marcacoes
-   * ([PISTA: ...], [TESTE: ...]) so' sao aplicadas no fim, pelo ingest() original,
-   * sobre o texto completo — o motor de regras nao e' tocado.
-   */
+
   async narrate(instr, opts={}){
     if(this.state.busy) return;
     this.setState({busy:true});
@@ -213,6 +274,7 @@ export default class OracleLogic extends React.Component<Props, any> {
           cena: d.cena,
           naCena: d.naCena.map(id=>this.npcById(id)).filter(Boolean).map(n=>this.fmtNpc(n)),
           history: d.log.slice(-(this.props.historyTurns||18)).map(e=>this.fmt(e)),
+          resumo: d.caso && d.caso.resumo ? d.caso.resumo : '',
           prefs: {
             tamanhoNarracao: this.props.tamanhoNarracao || 'medio',
             modeloIA: this.props.modeloIA || 'haiku',
@@ -230,7 +292,6 @@ export default class OracleLogic extends React.Component<Props, any> {
       }
       if(!res.ok || !res.body) throw new Error('narrate ' + res.status);
 
-      // Stream: mostra a prosa chegando numa entrada provisoria.
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf='', full='', opened=false;
@@ -258,14 +319,44 @@ export default class OracleLogic extends React.Component<Props, any> {
         }
       }
 
-      // Remove a entrada provisoria e deixa o ingest() original fazer o trabalho.
       if(opened) this.upd(e=>({...e,log:e.log.filter(x=>x.id!==streamId)}));
-      this.ingest(full||'', opts);
+
+      // As marcações NOVAS (cena, caso, fio) saem do texto ANTES do motor
+      // original — que segue intocado e recebe só o vocabulário dele — e são
+      // gravadas DEPOIS, porque ingest() reescreve caso e cena por inteiro a
+      // partir de uma leitura que fez antes de rodar.
+      const ext = lerExtensoes(full||'');
+      this.ingest(ext.texto, opts);
+      aplicarExtensoes(ext, this);
+      this.talvezResumir();
     }catch(err){
       this.upd(e=>({...e,log:e.log.filter(x=>x.id!==streamId)}));
       this.addLog({k:'mech',who:'Erro',text:'O narrador não respondeu. Tente de novo.'});
     }
     this.setState({busy:false});
+  }
+
+  /**
+   * Memória longa: a cada N turnos pede um parágrafo de resumo e o guarda no
+   * caso. O prompt passa a levar resumo + histórico recente, em vez de só as
+   * últimas entradas — o narrador para de esquecer o começo da crônica, e em
+   * crônicas longas o custo cai.
+   */
+  async talvezResumir(){
+    const d=this.cur(); if(!d) return;
+    const narrativas=d.log.filter(e=>e.k==='narr'||e.k==='npc').length;
+    const PASSO=12;
+    if(narrativas < PASSO) return;
+    if((d.caso.resumoEm||0) + PASSO > narrativas) return;
+    try{
+      const res=await fetch('/api/resumo',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({ era:this.state.era, anterior:d.caso.resumo||'',
+          history:d.log.slice(-40).map(e=>this.fmt(e)),
+          prefs:{modeloIA:this.props.modeloIA||'haiku'} })});
+      if(!res.ok) return;
+      const j=await res.json();
+      if(j && j.resumo) this.setCaso({resumo:String(j.resumo), resumoEm:narrativas});
+    }catch(e){ /* resumo e' melhoria, nao requisito: falhar aqui nao atrapalha a cena */ }
   }
 
   ingest(text, opts){
@@ -332,7 +423,7 @@ export default class OracleLogic extends React.Component<Props, any> {
   }
   afterTest(roll,note){
     const reg = roll.res==='Revés' ? 'Revés: a ação falha ou sai cara — imponha um Problema com [PROBLEMA: ...].' : roll.res==='Empate' ? 'Empate: consegue, com custo — um Problema leve ou uma complicação.' : 'Avanço: consegue; se a cena for importante, conceda uma [VANTAGEM: ...].';
-    setTimeout(()=>this.narrate(`O personagem rolou ${roll.hab}: ${roll.r}${roll.mod?' '+sign(roll.mod):''} = ${roll.tot}. ${note} Resultado final: ${roll.res}. ${reg} Narre a consequência.`),40);
+    setTimeout(()=>this.narrate(`O personagem rolou ${roll.hab}: ${roll.r}${roll.mod?' '+sign(roll.mod):''} = ${roll.tot}. ${note} Resultado final: ${roll.res}. ${reg} Primeiro, em uma ou duas frases, explique ao jogador como a regra funcionou nesta rolagem: o dado, cada modificador aplicado e por quê, a faixa atingida (Revés 1–2, Empate 3–4, Avanço 5+) e o que ela significa; depois narre a consequência.`),40);
   }
   markAct(entryId, idx){ this.upd(e=>({...e,log:e.log.map(x=>x.id===entryId?{...x,acts:(x.acts||[]).map((a,i)=>i===idx?{...a,done:true}:a)}:x)})); }
   rollChoque(perda, src){
@@ -345,7 +436,7 @@ export default class OracleLogic extends React.Component<Props, any> {
     const text=`1d6 = ${r}${esp?' +1':''} contra ${dif} · ${pass?'passou':'falhou'} · perde ${loss} (Sangue-Frio ${sf}, ${stateOf(sf,'sf')})`;
     if(src) this.addLog({k:'mech',who:'Choque · perda '+perda,text});
     this.setState({diceRes:{title:'Choque de Sangue-Frio',big:pass?'Aguentou':'Falhou',detail:text,logged:!!src,nar:'Choque de Sangue-Frio: '+text+'.'}});
-    if(src) setTimeout(()=>this.narrate(`Choque de Sangue-Frio (perda ${perda}): ${pass?'passou':'falhou'}, perdeu ${loss}; agora ${sf} (${stateOf(sf,'sf')}). Mostre o efeito interno em uma ou duas frases e siga a cena.`),40);
+    if(src) setTimeout(()=>this.narrate(`Choque de Sangue-Frio (perda ${perda}): ${pass?'passou':'falhou'}, perdeu ${loss}; agora ${sf} (${stateOf(sf,'sf')}). Primeiro explique em uma frase a regra do choque (1d6 contra a Dificuldade, o que passar ou falhar custa) e como ela se aplicou agora; depois mostre o efeito interno em uma ou duas frases e siga a cena.`),40);
   }
   spendBenef(hab, src){
     const c=this.cur().char;
@@ -483,22 +574,23 @@ export default class OracleLogic extends React.Component<Props, any> {
       loading:false,noEra:false,hasEra:true, era, eraSub:RR.sub, eraTitulo:RR.titulo, is1934:era==='1934', is1994:is94, is1946:era==='1946', is1974:era==='1974', is1999:era==='1999', hasCodigo:has('codigo'), hasMural:has('mural'), hasMedalha:has('medalha'), pjLabel:RR.pj,
       changeEra:()=>this.setState({era:null,diceRes:null},()=>this.save()),
       tabs:TABS.map(([k,label],i)=>({label,num:String(i+1).padStart(2,'0'),active:s.tab===k,inactive:s.tab!==k,go:()=>this.setTab(k)})),
+      bgLayers:(()=>{ const M={cronica:'fundos/bar.jpg',caso:'fundos/mesa.jpg',ficha:'fundos/perseguicao.jpg',dados:'fundos/briga.jpg',elenco:'fundos/silhuetas.jpg',cidade:'fundos/cais.jpg',seculo:'fundo-eras.png',tutorial:'fundos/mesa.jpg'}; const cur=M[s.tab]||'fundos/cais.jpg'; return [...new Set(Object.values(M))].map(src=>({src,op:src===cur?'0.42':'0',sc:src===cur?'1.02':'1.08'})); })(),
       tabBg:({cronica:'fundos/bar.jpg',caso:'fundos/mesa.jpg',ficha:'fundos/perseguicao.jpg',dados:'fundos/briga.jpg',elenco:'fundos/silhuetas.jpg',cidade:'fundos/cais.jpg',seculo:'fundo-eras.png',tutorial:'fundos/mesa.jpg'})[s.tab]||'fundos/cais.jpg',
-      tabCronica:tabIs('cronica'),tabCaso:tabIs('caso'),tabFicha:tabIs('ficha'),tabDados:tabIs('dados'),tabElenco:tabIs('elenco'),tabCidade:tabIs('cidade'),tabSeculo:tabIs('seculo'),tabTutorial:tabIs('tutorial'),
+      tabCronica:(tabIs('cronica')||s.tab==='dados'),tabCaso:tabIs('caso'),tabFicha:tabIs('ficha'),tabDados:false,tabElenco:tabIs('elenco'),tabCidade:tabIs('cidade'),tabSeculo:tabIs('seculo'),tabTutorial:tabIs('tutorial'),
       goFicha:()=>this.setTab('ficha'), goCaso:()=>this.setTab('caso'),
       // crônica
       logRef:this.logRef, logMaxH:(d.log.some(e=>e.k==='narr'||e.k==='npc')||s.busy)?'64vh':'none', logOverflow:(d.log.some(e=>e.k==='narr'||e.k==='npc')||s.busy)?'auto':'visible',logView: d.log.some(e=>e.k==='narr'||e.k==='npc') ? logView : logView.filter(e=>!e.isMech), logEmpty:!d.log.some(e=>e.k==='narr'||e.k==='npc')&&!s.busy, busy:s.busy,
       ...(()=>{ const AB={
           '1934':{k:'Saint Village apresenta',t:'Três da Manhã',sub:'no Café Palermo',l:'A chuva escorre pela escadaria do Fórum.',r:'MCMXXXIV'},
-          '1946':{k:'Março de 1946 · apresenta',t:'A Cadeira do Meio',sub:'',l:'Na Barbearia Fratelli, a cadeira do meio foi trocada; a nova não combina.',r:'MCMXLVI'},
+          '1946':{k:'apresenta',t:'A Cadeira do Meio',sub:'',l:'Uma história sobre mentiras e segredos.',r:'MCMXLVI'},
           '1974':{k:'',t:'Um Clique a Mais',sub:'',l:'O telefone fez um clique a mais antes de dar linha',r:'MCMLXXIV'},
           '1994':{k:'Três e dez da manhã',t:'Palermo 24h',sub:'',l:'A única luz acesa na Rua Clay.',r:'MCMXCIV'},
-          '1999':{k:'Ato final',t:'Três e Vinte',sub:'',l:'O sino da porta do Palermo 24h tocou.',r:'MCMXCIX'}}[era]||{k:'',t:'',sub:'',l:'',r:''};
+          '1999':{k:'26.12.1999 03:20',t:'Três e Vinte',sub:'',l:'O sino da porta do Palermo 24h tocou.',r:'MCMXCIX'}}[era]||{k:'',t:'',sub:'',l:'',r:''};
         const ct=(caso.titulo||'').trim(), cp=(caso.premissa||'').trim();
         const short=x=>x.length>150?x.slice(0,147).replace(/\s+\S*$/,'')+'…':x;
         const sub=ct?'':AB.sub;
         return {abKicker:AB.k, abTitulo:ct||AB.t, abSub:sub, abHasSub:!!sub, abLinha:ct&&cp?short(cp):AB.l,
-          abCopy:`Copyright ${AB.r} · Saint Village Pictures · Todos os direitos reservados`}; })(),
+          abCopy:AB.r==='MCMXCIV'?'Uma história pulp de Saint Village 1994':(AB.r==='MCMXLVI'||AB.r==='MCMLXXIV')?AB.r:`${AB.r} SAINT VILLAGE XX Century`}; })(),
       emptyLine: ({'1934':'Três da manhã no Café Palermo. A chuva escorre pela escadaria do Fórum.','1946':'Março de 1946. Na Barbearia Fratelli, a cadeira do meio foi trocada; a nova não combina.','1974':'O telefone fez um clique a mais antes de dar linha.','1994':'Três e dez da manhã. O Palermo 24h é a única luz acesa na Clay.','1999':'Três e vinte da manhã. O sino da porta do Palermo 24h tocou.'})[era],
       openCase:()=>this.openCase(),
       askContinue:()=>this.narrate('Continue a cena: avance a situação um passo, com uma complicação ou um detalhe novo, sem agir pelo personagem.'),
@@ -510,13 +602,19 @@ export default class OracleLogic extends React.Component<Props, any> {
       talkOptions:[...d.naCena.map(id=>this.npcById(id)).filter(Boolean), ...npcs.filter(n=>!d.naCena.includes(n.id))].map(n=>({id:n.id,nome:n.n+(d.naCena.includes(n.id)?' · em cena':'')})),
       draft:s.draft, onDraft:ev=>this.setState({draft:ev.target.value}),
       onDraftKey:ev=>{ if(ev.key==='Enter'&&!ev.shiftKey){ ev.preventDefault(); send(); } },
-      draftPh:s.mode==='fala'?'O que você diz?':'O que você faz?', send,
+      sendLabel:s.busy?'Aguarde…':'Enviar', draftPh:s.mode==='fala'?'O que você diz?':'O que você faz?', send,
       cena:d.cena, onCena:ev=>{ const v=ev.target.value; this.upd(e=>({...e,cena:v})); },
       regionOptions:regioes.map(r=>({nome:r.nome})), hasCenaMeta:!!cenaR, cenaMeta:cenaR?metaOf(cenaR):'',
       naCenaView:d.naCena.map(id=>this.npcById(id)).filter(Boolean).map(n=>({nome:n.n,remove:()=>this.upd(e=>({...e,naCena:e.naCena.filter(x=>x!==n.id)}))})),
       naCenaEmpty:d.naCena.length===0,
       fichaTitle:c.nome||('Novo '+RR.pj), tracks,
-      vantN:V, probN:P, vantView:caso.vant.map(t=>({t})), probView:caso.prob.map(t=>({t})), pistasN:caso.pistas.length, pesoTotal, caso,
+      vantN:V, probN:P, vantView:caso.vant.map(t=>({t})), probView:caso.prob.map(t=>({t})), ...(()=>{ const st=[
+          {n:1,label:'Monte a ficha',done:!!(c.nome||'').trim(),go:()=>this.setTab('ficha')},
+          {n:2,label:'Abra um caso',done:!!((caso.premissa||'').trim()||(caso.titulo||'').trim()),go:()=>this.setTab('caso')},
+          {n:3,label:'Jogue a primeira cena',done:d.log.some(e=>e.k==='narr'),go:()=>this.setTab('cronica')},
+          {n:4,label:'Role um dado',done:!!s.lastRolls||d.log.some(e=>e.k==='mech'),go:()=>this.setTab('dados')}].map(x=>({...x,todo:!x.done}));
+        return {guideSteps:st, guideShow:!s.guideOff && st.some(x=>!x.done), guideClose:()=>{ try{ localStorage.setItem('sv-guide-off','1'); }catch(e){} this.setState({guideOff:true}); }}; })(),
+      pistasN:caso.pistas.length, pistasVazias:!caso.pistas.length, provasVazias:!caso.provas.length, pesoTotal, caso,
       // caso
       geradorTitulo: is94?'Arquivo · gancho do livro':era==='1934'?'Dossiê · gerador de casos (1d8 × 6)':'Dossiê · gerador de casos do século (1d6 × 5) e o toque da era', geradorBtn: is94?'Sortear gancho de uma região':era==='1934'?'Rolar o gerador de casos':'Rolar o gerador do século',
       c_titulo:ev=>this.setCaso({titulo:ev.target.value}), c_premissa:ev=>this.setCaso({premissa:ev.target.value}), c_nec:ev=>this.setCaso({nec:parseInt(ev.target.value)}),
@@ -583,7 +681,8 @@ export default class OracleLogic extends React.Component<Props, any> {
       soloHab:s.soloHab, onSoloHab:ev=>this.setState({soloHab:ev.target.value}), soloModLabel:sign(s.soloMod)||'0',
       soloModInc:()=>this.setState({soloMod:s.soloMod+1}), soloModDec:()=>this.setState({soloMod:s.soloMod-1}),
       rollSolo:()=>this.rollTest(s.soloHab,{mod:s.soloMod,narrate:false}),
-      gold:s.gold, goldGInc:()=>this.setState({gold:{...s.gold,gasto:s.gold.gasto+1}}), goldGDec:()=>this.setState({gold:{...s.gold,gasto:Math.max(0,s.gold.gasto-1)}}),
+      gold:s.gold, goldNeed:Math.max(1,(s.gold.dif||0)-(s.gold.gasto||0)), goldImpossivel:(s.gold.dif||0)-(s.gold.gasto||0)>6, goldCerto:(s.gold.dif||0)-(s.gold.gasto||0)<=1, goldNormal:((s.gold.dif||0)-(s.gold.gasto||0))>1&&((s.gold.dif||0)-(s.gold.gasto||0))<=6,
+      lastDice:(s.lastRolls||[]).map(r=>({isD6:r.n===6,isD8:r.n!==6,v:r.v,pips:Array.from({length:9},(_,k)=>({on:r.n===6&&SV_PIPS[r.v].includes(k),off:!(r.n===6&&SV_PIPS[r.v].includes(k))}))})), hasLastDice:!!(s.lastRolls&&s.lastRolls.length), goldGInc:()=>this.setState({gold:{...s.gold,gasto:s.gold.gasto+1}}), goldGDec:()=>this.setState({gold:{...s.gold,gasto:Math.max(0,s.gold.gasto-1)}}),
       goldDInc:()=>this.setState({gold:{...s.gold,dif:Math.min(8,s.gold.dif+1)}}), goldDDec:()=>this.setState({gold:{...s.gold,dif:Math.max(2,s.gold.dif-1)}}),
       rollGold:()=>{ const r=rnd(6), t=r+s.gold.gasto; setDice('Regra de ouro',t>=s.gold.dif?'Conseguiu':'Falhou',`1d6 = ${r} + ${s.gold.gasto} gastos = ${t} contra Dificuldade ${s.gold.dif}`); },
       armas, danoArma:s.danoArma, onDanoArma:ev=>this.setState({danoArma:ev.target.value}), qrLabel:s.qr?'Queima-roupa +2 ✓':'Queima-roupa +2', toggleQR:()=>this.setState({qr:!s.qr}),
@@ -636,7 +735,7 @@ export default class OracleLogic extends React.Component<Props, any> {
     };
   }
 
-  /** DCLogic chamava renderVals() por fora; aqui a propria classe renderiza. */
+  /** DCLogic chamava renderVals() por fora; aqui a própria classe renderiza. */
   render(){
     return <OracleView v={this.renderVals()} />;
   }
