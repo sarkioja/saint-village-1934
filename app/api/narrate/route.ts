@@ -13,6 +13,43 @@ const MAX_TOKENS = 1000; // igual ao artifact original
 const DEMO_LIMIT = Number(process.env.DEMO_TURNS_PER_IP || 5);
 const USER_LIMIT = Number(process.env.DAILY_TURNS_PER_USER || 50);
 
+// Limites de entrada. O cliente manda o historico e o estado do jogo, entao
+// sem teto aqui uma requisicao forjada inflaria o prompt — e a conta de quem
+// paga a chave. O corte e' do servidor, que e' quem arca com o custo.
+const HISTORY_TURNS = Number(process.env.HISTORY_TURNS || 18);
+const MAX_CHARS_POR_ENTRADA = 4000;
+const MAX_CHARS_HISTORICO = 24000;
+const MAX_NPCS_EM_CENA = 12;
+const MAX_CHARS_CAMPO = 4000;
+
+/** Corta uma lista de textos por numero de itens e por total de caracteres. */
+function limitarTextos(v: unknown, maxItens: number, maxTotal: number): string[] {
+  if (!Array.isArray(v)) return [];
+  const ultimos = v.slice(-maxItens).map((x) => String(x).slice(0, MAX_CHARS_POR_ENTRADA));
+  const out: string[] = [];
+  let total = 0;
+  // De tras para frente: o que importa e' o fim da conversa.
+  for (let i = ultimos.length - 1; i >= 0; i--) {
+    total += ultimos[i].length;
+    if (total > maxTotal) break;
+    out.unshift(ultimos[i]);
+  }
+  return out;
+}
+
+/** Trunca os campos de texto de um objeto do estado do jogo. */
+function limitarCampos(o: unknown): Record<string, any> {
+  if (!o || typeof o !== 'object') return {};
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = v.slice(0, MAX_CHARS_CAMPO);
+    else if (Array.isArray(v)) out[k] = v.slice(0, 60).map((x) => (typeof x === 'string' ? x.slice(0, MAX_CHARS_CAMPO) : limitarCampos(x)));
+    else if (v && typeof v === 'object') out[k] = limitarCampos(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
 const QUOTA_MSG =
   'Os arquivos da cidade fecham por hoje. O escrivão vira a placa, apaga a luz do corredor e diz para você voltar amanhã.';
 
@@ -88,16 +125,21 @@ export async function POST(req: NextRequest) {
   const prefs = body?.prefs ?? {};
   const { stable, volatile } = buildSystemPrompt({
     era,
-    char: body?.char ?? {},
-    caso: body?.caso ?? {},
-    cena: String(body?.cena ?? ''),
-    naCena: Array.isArray(body?.naCena) ? body.naCena.map(String) : [],
-    npc: body?.npc ?? null,
+    char: limitarCampos(body?.char),
+    caso: limitarCampos(body?.caso),
+    cena: String(body?.cena ?? '').slice(0, 200),
+    naCena: limitarTextos(body?.naCena, MAX_NPCS_EM_CENA, 12000),
+    npc: body?.npc
+      ? {
+          n: String(body.npc.n ?? '').slice(0, 120),
+          perfil: String(body.npc.perfil ?? '').slice(0, 2000),
+        }
+      : null,
     prefs,
     book: trimmedBook,
   });
 
-  const history: string[] = Array.isArray(body?.history) ? body.history.map(String) : [];
+  const history = limitarTextos(body?.history, HISTORY_TURNS, MAX_CHARS_HISTORICO);
   const user = `HISTÓRICO RECENTE DA CRÔNICA:\n${history.join('\n') || '(início)'}\n\nAGORA: ${instr}`;
 
   const tier: Tier = prefs?.modeloIA === 'sonnet' ? 'quality' : 'fast';

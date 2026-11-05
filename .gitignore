@@ -8,3 +8,6 @@ next-env.d.ts
 tests/pixel/__diff__/
 tests/pixel/__shots__/
 .data/
+
+# bloco de env gerado localmente, nunca versionado
+producao*.env

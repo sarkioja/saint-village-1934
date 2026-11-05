@@ -141,6 +141,46 @@ describe('POST /api/narrate', () => {
     expect(j.message).toMatch(/arquivos da cidade/i);
   });
 
+  it('corta o historico no teto do servidor, nao no que o cliente mandar', async () => {
+    // Sem isto, uma requisicao forjada inflaria o prompt — e a conta de quem
+    // paga a chave. HISTORY_TURNS e' 18 por padrao.
+    const p = fakeProvider('ok');
+    __setProvider(p);
+    const { POST } = await import('@/app/api/narrate/route');
+
+    const enorme = Array.from({ length: 500 }, (_, i) => `ENTRADA ${i}`);
+    await readSse(
+      (await POST(reqOf({ ...baseBody, history: enorme }, '198.51.100.40'))) as Response,
+    );
+
+    const req = ((p as any).seen as LlmRequest[])[0];
+    const linhas = req.user.split('\n').filter((l) => l.startsWith('ENTRADA '));
+    expect(linhas.length).toBeLessThanOrEqual(18);
+    // Mantem o FIM da conversa, que e' o que importa para a cena.
+    expect(req.user).toContain('ENTRADA 499');
+    expect(req.user).not.toContain('ENTRADA 0\n');
+  });
+
+  it('limita o tamanho dos campos do estado do jogo', async () => {
+    const p = fakeProvider('ok');
+    __setProvider(p);
+    const { POST } = await import('@/app/api/narrate/route');
+
+    const gigante = 'x'.repeat(200_000);
+    await readSse(
+      (await POST(
+        reqOf(
+          { ...baseBody, caso: { ...baseBody.caso, premissa: gigante }, cena: gigante },
+          '198.51.100.41',
+        ),
+      )) as Response,
+    );
+
+    const req = ((p as any).seen as LlmRequest[])[0];
+    // 200 mil caracteres nao podem virar prompt.
+    expect(req.volatile.length).toBeLessThan(20_000);
+  });
+
   it('o modelo apurado escolhe o tier de qualidade', async () => {
     const p = fakeProvider('x');
     __setProvider(p);
