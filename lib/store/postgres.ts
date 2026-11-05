@@ -1,4 +1,5 @@
 import { SqlStore, type Query } from './sql';
+import { postgresUrl, NOMES_ACEITOS } from './pgurl';
 
 /**
  * Postgres, com o driver escolhido pela propria URL.
@@ -20,11 +21,11 @@ import { SqlStore, type Query } from './sql';
  */
 export class PostgresStore extends SqlStore {
   constructor() {
-    const url = process.env.DATABASE_URL;
+    const url = postgresUrl();
     if (!url) {
       throw new Error(
-        'DATABASE_URL ausente. Provisione um Postgres (ex.: `vercel install neon`) ' +
-          'ou use DATA_BACKEND=fs para rodar local.',
+        `Nenhuma URL de Postgres encontrada (procurei em ${NOMES_ACEITOS.join(', ')}). ` +
+          'Provisione um Postgres (ex.: `vercel install neon`) ou use DATA_BACKEND=fs.',
       );
     }
 

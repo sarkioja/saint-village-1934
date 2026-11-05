@@ -29,9 +29,10 @@ if (!['export', 'import'].includes(acao) || !arquivo) {
   process.exit(2);
 }
 
-const url = process.env.DATABASE_URL;
+const NOMES = ['DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_URL_NON_POOLING'];
+const url = NOMES.map((n) => process.env[n]).find((v) => /^postgres(ql)?:\/\//i.test(v || ''));
 if (!url) {
-  console.error('DATABASE_URL nao definida.');
+  console.error(`Nenhuma URL de Postgres encontrada (procurei em ${NOMES.join(', ')}).`);
   process.exit(2);
 }
 

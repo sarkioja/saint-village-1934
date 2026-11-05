@@ -16,9 +16,12 @@ for (const f of ['.env.local', '.env']) {
   }
 }
 
-const url = process.env.DATABASE_URL;
+// Mesma descoberta do app: as integracoes nao injetam sempre o mesmo nome.
+const NOMES = ['DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_URL_NON_POOLING'];
+const varName = NOMES.find((n) => /^postgres(ql)?:\/\//i.test(process.env[n] || ''));
+const url = varName ? process.env[varName] : null;
 if (!url) {
-  console.error('\nDATABASE_URL nao definida.');
+  console.error(`\nNenhuma URL de Postgres encontrada (procurei em ${NOMES.join(', ')}).`);
   console.error('Provisione o banco (`vercel install neon`) e rode `vercel env pull .env.local`.\n');
   process.exit(2);
 }
@@ -44,6 +47,7 @@ try {
     `SELECT table_name FROM information_schema.tables
       WHERE table_schema='public' ORDER BY table_name`,
   );
+  console.log('url de :', varName);
   console.log('driver :', isNeon ? 'neon (HTTP)' : 'pg');
   console.log('tabelas:', t.map((r) => r.table_name).join(', '));
   console.log('OK — esquema criado.');

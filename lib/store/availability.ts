@@ -7,14 +7,16 @@
  * precisa da chave da LLM) e as telas de conta dizem isso, em vez de perder dados
  * em silencio.
  */
+import { postgresUrl } from './pgurl';
+
 export function accountsEnabled(): boolean {
-  const backend = (process.env.DATA_BACKEND || 'fs').toLowerCase();
+  const backend = (process.env.DATA_BACKEND || (postgresUrl() ? 'postgres' : 'fs')).toLowerCase();
   if (backend === 'fs') {
     // O criterio nao e' "producao" e sim "serverless": num servidor proprio o
     // disco persiste e o backend de arquivo e' legitimo. Na Vercel, nao.
     return process.env.VERCEL !== '1';
   }
-  if (backend === 'neon') return !!process.env.DATABASE_URL;
+  if (backend === 'neon' || backend === 'postgres') return !!postgresUrl();
   return true;
 }
 

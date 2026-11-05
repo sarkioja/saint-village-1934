@@ -94,7 +94,11 @@ let cached: DataStore | null = null;
 
 export async function getStore(): Promise<DataStore> {
   if (cached) return cached;
-  const want = (process.env.DATA_BACKEND || 'fs').toLowerCase();
+  // Sem DATA_BACKEND explicito: havendo URL de Postgres configurada, usa o
+  // banco. Provisionar o banco e' a intencao; exigir uma segunda variavel so'
+  // para "ligar" seria um passo a mais para esquecer.
+  const { postgresUrl } = await import('./pgurl');
+  const want = (process.env.DATA_BACKEND || (postgresUrl() ? 'postgres' : 'fs')).toLowerCase();
   if (want === 'fs') {
     const { FsStore } = await import('./fs');
     cached = new FsStore();
