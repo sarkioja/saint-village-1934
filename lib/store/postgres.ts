@@ -52,4 +52,5 @@ export class PostgresStore extends SqlStore {
 
     super(isNeon ? 'neon' : 'postgres', query);
   }
+
 }

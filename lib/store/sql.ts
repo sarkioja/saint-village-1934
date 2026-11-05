@@ -25,12 +25,43 @@ export type Query = (text: string, params?: unknown[]) => Promise<any[]>;
 export class SqlStore implements DataStore {
   constructor(
     readonly backend: string,
-    private q: Query,
+    protected q: Query,
   ) {}
 
   /** Cria o esquema (lib/store/schema.mjs). Idempotente. */
   async migrate(): Promise<void> {
     for (const ddl of SCHEMA) await this.q(ddl);
+  }
+
+  /**
+   * Cria o esquema na primeira vez que o processo toca o banco.
+   *
+   * Existe porque `npm run migrate` exige uma maquina com acesso ao banco, e
+   * nem sempre ha' uma: com o app na Vercel e o banco no Marketplace, o dono da
+   * conta pode nao ter onde rodar o comando. Sem isto, o primeiro cadastro
+   * falharia com "relation does not exist" — erro opaco para quem preencheu as
+   * variaveis e esperava que funcionasse.
+   *
+   * Custo: uma consulta barata por cold start. O DDL so' roda se a tabela nao
+   * existir, e e' idempotente, entao dois cold starts simultaneos nao se
+   * atrapalham.
+   */
+  private pronto: Promise<void> | null = null;
+
+  async garantirEsquema(): Promise<void> {
+    if (!this.pronto) {
+      this.pronto = (async () => {
+        // to_regclass devolve null quando a tabela nao existe, sem lancar erro.
+        const r = await this.q(`SELECT to_regclass('public.users') IS NOT NULL AS existe`);
+        if (r?.[0]?.existe) return;
+        await this.migrate();
+      })().catch((e) => {
+        // Uma falha nao pode deixar o processo achando que ja' migrou.
+        this.pronto = null;
+        throw e;
+      });
+    }
+    return this.pronto;
   }
 
   // --------------------------------------------------------------- usuarios

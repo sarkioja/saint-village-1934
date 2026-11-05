@@ -67,15 +67,15 @@ OPENCODE_MODEL_QUALITY=...
 por `DATABASE_URL`, `POSTGRES_URL`, `POSTGRES_PRISMA_URL`, `DATABASE_URL_UNPOOLED` e
 `POSTGRES_URL_NON_POOLING` — e, achando qualquer uma, usa o banco automaticamente.
 
-Falta só **criar as tabelas**, uma única vez:
+**As tabelas também se criam sozinhas.** Na primeira vez que o app toca o banco, ele confere se a
+tabela `users` existe e, não existindo, roda o esquema. Custa uma consulta barata por cold start e
+não precisa de nenhum comando.
+
+Se preferir fazer à mão (por exemplo, para conferir antes de abrir ao público):
 
 ```bash
-vercel link                      # escolha o projeto saint-village-1934
-vercel env pull .env.local
-npm run migrate
+vercel link && vercel env pull .env.local && npm run migrate
 ```
-
-Deve imprimir `tabelas: campaigns, quota, shares, users`.
 
 ---
 
@@ -103,17 +103,36 @@ não abre a URL — o jogo não fica público.
 
 ## Como conferir que deu certo
 
-Sem abrir o navegador:
+Abra no navegador (ou com `curl`):
 
-```bash
-curl -s https://saint-village-1934.vercel.app/api/me
+```
+https://saint-village-1934.vercel.app/api/health
 ```
 
-| Resposta | Significa |
+Ele responde o que está ligado — **sem expor o valor de nenhuma chave**:
+
+```json
+{
+  "ok": true,
+  "narrador": { "LLM_PROVIDER": "claude", "pronto": true,
+                "modeloRapido": "claude-haiku-5-5", "modeloApurado": "claude-sonnet-5-5" },
+  "banco":    { "urlEncontradaEm": "DATABASE_URL", "contasLigadas": true, "tabelasOk": true },
+  "sessao":   { "AUTH_SECRET": "definida" }
+}
+```
+
+O que olhar, em ordem:
+
+| Campo | Se estiver errado |
 |---|---|
-| `{"user":null,"accountsEnabled":false}` | o banco ainda não foi encontrado |
-| `{"user":null,"accountsEnabled":true}` | banco ligado; dá para cadastrar |
+| `narrador.pronto: false` | falta a chave do provedor, ou o `LLM_PROVIDER` aponta para um sem chave — o campo `problema` diz qual |
+| `narrador.LLM_PROVIDER` com "(não definida)" | o app está assumindo `claude`; defina a variável para escolher outro |
+| `banco.urlEncontradaEm: "(nenhuma)"` | a integração do banco não injetou URL nenhuma no projeto |
+| `banco.tabelasOk: false` | o banco respondeu, mas o esquema falhou — o campo `problema` traz o erro |
+| `sessao.AUTH_SECRET` com "(não definida)" | cadastro e login vão falhar |
 | HTML de login da Vercel | Deployment Protection ainda ligada (passo 4) |
+
+`ok: false` devolve HTTP 503, então dá para monitorar.
 
 Depois, no app: abra a era 1934, escreva uma ação e envie. Se o narrador responder, a chave da LLM
 está valendo. Se vier *"O narrador não respondeu"*, confira a chave; se vier a mensagem sobre

@@ -57,6 +57,48 @@ describe('esquema', () => {
   });
 });
 
+describe('criacao automatica do esquema', () => {
+  it('cria as tabelas num banco vazio e nao refaz na segunda vez', async () => {
+    // Banco novo, separado: prova o caminho do primeiro cold start em producao,
+    // onde ninguem rodou `npm run migrate` porque nao havia onde rodar.
+    const novo = await new PGlite();
+    let consultas = 0;
+    const q = async (t: string, p: unknown[] = []) => {
+      consultas++;
+      return (await novo.query(t, p as any[])).rows as any[];
+    };
+    const st = new SqlStore('pglite-vazio', q);
+
+    const antes = (await q(`SELECT to_regclass('public.users') IS NOT NULL AS existe`))[0];
+    expect(antes.existe).toBe(false);
+
+    await st.garantirEsquema();
+    const depois = (await q(`SELECT to_regclass('public.users') IS NOT NULL AS existe`))[0];
+    expect(depois.existe).toBe(true);
+
+    // O app passa a funcionar sem nenhum comando manual.
+    const u = await st.createUser({ email: 'a@b.com', passwordHash: 'h', nome: 'A', prefs: {} });
+    expect(u.id).toBeTruthy();
+
+    // Segunda chamada nao dispara DDL de novo (memoizada).
+    const marca = consultas;
+    await st.garantirEsquema();
+    expect(consultas).toBe(marca);
+  });
+
+  it('num banco que ja tem as tabelas, so faz a consulta de checagem', async () => {
+    let consultas = 0;
+    const q = async (t: string, p: unknown[] = []) => {
+      consultas++;
+      return (await db.query(t, p as any[])).rows as any[];
+    };
+    const st = new SqlStore('pglite-existente', q);
+    await st.garantirEsquema();
+    // Uma consulta: a checagem. Nada de DDL.
+    expect(consultas).toBe(1);
+  });
+});
+
 describe('usuarios', () => {
   it('cria e le, preservando prefs em jsonb', async () => {
     const u = await novoUsuario();

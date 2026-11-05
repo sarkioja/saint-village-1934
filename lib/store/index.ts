@@ -105,7 +105,10 @@ export async function getStore(): Promise<DataStore> {
   } else if (want === 'neon' || want === 'postgres') {
     // `neon` fica como apelido de `postgres`: o driver e' escolhido pela URL.
     const { PostgresStore } = await import('./postgres');
-    cached = new PostgresStore();
+    const pg = new PostgresStore();
+    // Cria o esquema se ainda nao existir. Idempotente e barato.
+    await pg.garantirEsquema();
+    cached = pg;
   } else {
     throw new Error(`DATA_BACKEND desconhecido: ${want}`);
   }
