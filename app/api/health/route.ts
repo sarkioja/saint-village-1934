@@ -107,27 +107,34 @@ export async function GET(req: NextRequest) {
       try {
         const p = getProvider();
         const t0 = Date.now();
-        // 200 tokens, nao 8: um modelo de raciocinio gasta o orcamento pensando
-        // e devolve conteudo vazio, o que pareceria "funcionando" por engano.
+        // A sonda usa o MESMO orcamento da narracao real (1000) e pede um texto
+        // do mesmo tamanho. Uma frase curta nao provaria nada: se o modelo gasta
+        // tokens pensando, o truncamento so' apareceria no tamanho de verdade —
+        // e o jogador veria a cena cortada no meio.
         const pedido = {
-          stable: 'Você narra em português do Brasil.',
+          stable: 'Você é um narrador de ficção noir e escreve em português do Brasil.',
           volatile: '',
-          user: 'Escreva uma frase curta sobre chuva num píer.',
-          maxTokens: 200,
+          user: 'Narre, em 90 a 170 palavras, a chegada de alguém a um píer na chuva, à noite.',
+          maxTokens: 1000,
           tier: 'fast' as const,
         };
         const texto = await p.complete(pedido);
         const ms = Date.now() - t0;
         const limpo = texto.trim();
 
+        const palavras = limpo ? limpo.split(/\s+/).length : 0;
         saida.sonda = {
           feita: true,
           chaveValida: true,
           modelo: p.modelFor('fast'),
           ms,
           gerouTexto: limpo.length > 0,
-          respondeu: limpo.slice(0, 160),
+          palavras,
+          // Terminar sem pontuacao final e' o sintoma de corte por orcamento.
+          pareceTruncado: palavras > 0 && !/[.!?…"”»]$/.test(limpo),
+          respondeu: limpo.slice(0, 220),
         };
+        if ((saida.sonda as any).pareceTruncado) saida.ok = false;
 
         // Vazio sem erro e' o caso perigoso: passaria por "ok" e entregaria
         // narracao em branco ao jogador. Investiga e reprova.
