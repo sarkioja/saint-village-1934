@@ -200,15 +200,30 @@ pixels e pelos testes do parser, não pelo compilador. Todo código novo é tipa
 
 ## O narrador
 
-### Dois providers, por env
+### Quatro provedores, por env
 
 ```
-LLM_PROVIDER=claude     # Anthropic Messages API, nativa
-LLM_PROVIDER=opencode   # qualquer endpoint OpenAI-compatível
+LLM_PROVIDER=claude      # Anthropic Messages API, nativa
+LLM_PROVIDER=openai      # api.openai.com
+LLM_PROVIDER=openrouter  # openrouter.ai — centenas de modelos, inclusive Claude
+LLM_PROVIDER=opencode    # OpenCode Zen, ou qualquer endpoint OpenAI-compatível
 ```
 
-O segundo atende OpenCode Zen, Vercel AI Gateway, OpenRouter, Ollama, LM Studio — trocar de backend
-é mexer em variável, sem deploy.
+Os três últimos compartilham um adapter só (`/v1/chat/completions`), que difere em base URL, nome
+da variável de chave, modelos padrão e cabeçalhos. `opencode` é o genérico: aponte
+`OPENCODE_BASE_URL` para OpenCode Zen, Vercel AI Gateway, Ollama, LM Studio ou qualquer outro
+compatível. Trocar de provedor é mexer em variável, sem deploy.
+
+Dois detalhes que o adapter trata sozinho:
+
+- **`max_completion_tokens`** — alguns modelos de raciocínio da OpenAI recusam `max_tokens`. Em vez
+  de perder o turno, o adapter repete a chamada com o campo que o modelo aceita.
+- **Erro no meio do stream** — o OpenRouter pode mandar um objeto de erro já dentro do SSE; ele vira
+  exceção, não texto narrado.
+
+**O `claude` é o único com prompt caching**, que corta ~2/3 da entrada por turno (§4.2). Nos
+provedores OpenAI-compatíveis o protocolo não tem `cache_control`, então os dois blocos de system
+vão concatenados e cada turno paga a entrada inteira. Se tiver a chave da Anthropic, prefira-a.
 
 ### Custo por turno, e como ele foi cortado
 
@@ -270,18 +285,26 @@ arquiva bancos após 30 dias sem uso).
 O Neon é instalado pelo **Marketplace da Vercel**, com as envs injetadas e gestão no painel da
 Vercel.
 
-### Reversibilidade
+### O banco não é preso a fornecedor
 
 Tudo passa por `DataStore` (`lib/store/index.ts`), escolhido por `DATA_BACKEND`:
 
-- `fs` — grava em `.data/`. Para desenvolvimento e testes; **não** serve em serverless.
-- `neon` — produção. SQL à mão, driver HTTP (sem pool, que não se reaproveita em serverless).
+- `fs` — grava em `.data/`. Desenvolvimento e servidor próprio; **não** serve em serverless.
+- `postgres` — produção. O SQL vive em `lib/store/sql.ts` e o **driver é escolhido pela própria
+  `DATABASE_URL`**: HTTP (`@neondatabase/serverless`) para `*.neon.tech`, `pg` para qualquer outro
+  Postgres. `neon` continua valendo como apelido.
 
-Quatro tabelas: `users`, `campaigns` (estado em `jsonb` + `rev`), `quota`, `shares`.
+Quatro tabelas — `users`, `campaigns` (estado em `jsonb` + `rev`), `quota`, `shares` — em Postgres
+padrão, sem extensão e sem recurso proprietário. O esquema tem **fonte única**
+(`lib/store/schema.mjs`), compartilhada entre o app e os scripts de linha de comando.
 
 `campaigns.state` guarda **exatamente** a forma que `blankEra()` produz — é isso que torna o porte
 trivial: o shape do dado não muda, só o meio. O lock otimista é `WHERE rev = $n`; a cota é atômica
 num único `INSERT … ON CONFLICT … DO UPDATE`.
+
+Esse SQL roda contra um **Postgres de verdade** nos testes (PGlite, o Postgres compilado para WASM),
+sem servidor: unicidade de e-mail sob criações simultâneas, duas gravações concorrentes com o mesmo
+`rev` (só uma passa), oito incrementos paralelos de cota sem perder contagem, e deletes em cascata.
 
 ### Sessão
 
@@ -342,6 +365,62 @@ vercel deploy --prod
 
 Envs obrigatórias em produção: `ANTHROPIC_API_KEY`, `AUTH_SECRET`, `DATA_BACKEND=neon`,
 `DATABASE_URL`. As demais têm padrão — ver `.env.example`.
+
+## Transferir o projeto para outra pessoa
+
+Sim, as três partes mudam de dono — mas por caminhos diferentes, e a do banco é a que exige
+atenção.
+
+**1. Repositório no GitHub.** Settings → *Transfer ownership*. Leva issues, PRs e histórico. Você
+precisa ser admin, e quem recebe precisa aceitar.
+
+**2. Projeto na Vercel.** Tem transferência de primeira classe: a Vercel gera um código válido por
+24 h e quem recebe aceita pelo link de claim. Leva domínios, deployments e variáveis de ambiente.
+Pela CLI/API:
+
+```bash
+vercel api /projects/<projeto>/transfer-request --method POST
+```
+
+Quem recebe abre `https://vercel.com/claim-deployment?code=<code>`. Depois é preciso reconectar o
+repositório, que agora está na conta nova.
+
+**3. Banco de dados — o ponto de atenção.** Um recurso do Marketplace (o Neon) está amarrado à
+*instalação* do Marketplace na conta de origem, não ao projeto. Existe um mecanismo de transferência
+de recurso, mas ele é da API de integração, conduzido pelo fornecedor, e não um botão que você
+aperta. **Não conte com ele.**
+
+Por isso o banco deste projeto foi feito para não depender disso:
+
+- o esquema é Postgres padrão, sem extensão nem recurso proprietário;
+- o driver é escolhido pela `DATABASE_URL`, então qualquer Postgres serve — Neon, Supabase,
+  Railway, RDS ou um servidor próprio;
+- e existe `npm run handover`, que leva os dados inteiros num arquivo JSON.
+
+O caminho garantido, que não depende de o Marketplace cooperar:
+
+```bash
+# na conta de origem
+DATABASE_URL=<origem> node tools/handover.mjs export dados.json
+```
+
+```bash
+# na conta de destino, com um Postgres novo já provisionado
+DATABASE_URL=<destino> npm run migrate
+DATABASE_URL=<destino> node tools/handover.mjs import dados.json
+```
+
+Isso preserva hashes de senha (os logins continuam valendo), as crônicas byte a byte, a cota, os
+links públicos e o `rev` de cada crônica — então o lock otimista segue coerente depois da mudança.
+A importação é idempotente: rodar duas vezes não duplica nada. O caminho inteiro é coberto por
+teste (`tests/handover.test.ts`): exporta, apaga o banco, importa e confere.
+
+> O arquivo contém hashes de senha, e-mails e crônicas inteiras. Trate-o como backup sensível e
+> apague depois da migração.
+
+**4. As chaves de LLM** não se transferem: quem recebe põe as próprias em `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY` ou `OPENROUTER_API_KEY`. Como o provedor é escolhido por variável de ambiente,
+quem recebe pode usar um provedor diferente do seu sem tocar em código.
 
 > O **plano Hobby da Vercel é restrito a uso não comercial** pelos termos deles. Enquanto o jogo for
 > gratuito, tudo certo; no dia em que cobrar algo, a Vercel passa a exigir o Pro.

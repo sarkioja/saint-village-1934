@@ -11,17 +11,21 @@
     "test": "vitest run",
     "verify:pixel": "node tests/pixel/run.mjs",
     "migrate": "node tools/migrate.mjs",
-    "test:smoke": "node tests/smoke.mjs"
+    "test:smoke": "node tests/smoke.mjs",
+    "handover": "node tools/handover.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",
     "@neondatabase/serverless": "^1.2.0",
     "next": "^15.5.29",
+    "pg": "^8.23.1",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@types/node": "22.10.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "18.3.18",
     "@types/react-dom": "18.3.5",
     "domhandler": "^5.0.3",

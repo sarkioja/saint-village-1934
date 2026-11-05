@@ -4,12 +4,15 @@
  * Tudo passa por esta interface para que o backend seja trocavel sem tocar em
  * rota nem componente. Implementacoes:
  *
- *   fs    -> lib/store/fs.ts     (dev e testes; grava em .data/)
- *   neon  -> lib/store/neon.ts   (producao; Postgres via Marketplace da Vercel)
- *   blob  -> lib/store/blob.ts   (alternativa first-party; CAS via ifMatch)
+ *   fs                 -> lib/store/fs.ts        (dev e testes; grava em .data/)
+ *   postgres (ou neon) -> lib/store/postgres.ts  (producao)
  *
- * Escolhido por DATA_BACKEND. Ver a analise de custo dos planos gratuitos no
- * README antes de trocar: o teto de operacoes do Blob e' o mais apertado.
+ * O backend de Postgres nao e' preso a fornecedor: o SQL vive em sql.ts e o
+ * driver e' escolhido pela propria DATABASE_URL (HTTP no Neon, `pg` em qualquer
+ * outro). Levar os dados para outra conta e' um `pg_dump` — ver "Transferir o
+ * projeto" no README.
+ *
+ * Escolhido por DATA_BACKEND.
  */
 
 export type User = {
@@ -92,9 +95,10 @@ export async function getStore(): Promise<DataStore> {
   if (want === 'fs') {
     const { FsStore } = await import('./fs');
     cached = new FsStore();
-  } else if (want === 'neon') {
-    const { NeonStore } = await import('./neon');
-    cached = new NeonStore();
+  } else if (want === 'neon' || want === 'postgres') {
+    // `neon` fica como apelido de `postgres`: o driver e' escolhido pela URL.
+    const { PostgresStore } = await import('./postgres');
+    cached = new PostgresStore();
   } else {
     throw new Error(`DATA_BACKEND desconhecido: ${want}`);
   }
