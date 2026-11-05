@@ -39,9 +39,15 @@ const remapGstatic = (css) =>
 const out = styles.map((s) => remapGstatic(remapUuid(s))).join('\n');
 if (unresolved.length) throw new Error('asset sem arquivo local: ' + [...new Set(unresolved)].join(', '));
 
-// Invariante: o CSS servido nao pode conter nenhuma referencia externa.
-const remote = out.match(/https?:\/\/[^)"'\s]+/g);
-if (remote) throw new Error('sobraram URLs remotas: ' + [...new Set(remote)].join(', '));
+// Invariante: o CSS servido nao pode conter nenhuma referencia de REDE externa.
+//
+// Namespaces XML (xmlns='http://www.w3.org/2000/svg') aparecem dentro dos
+// data:image/svg+xml e parecem URLs, mas sao identificadores: o navegador nunca
+// os busca. Excluir apenas esses, e nao afrouxar o teste, mantem a invariante
+// valendo para tudo que de fato seria baixado.
+const NAMESPACES = /^https?:\/\/www\.w3\.org\//;
+const remote = (out.match(/https?:\/\/[^)"'\s]+/g) || []).filter((u) => !NAMESPACES.test(u));
+if (remote.length) throw new Error('sobraram URLs remotas: ' + [...new Set(remote)].join(', '));
 
 writeFileSync('app/oracle.css', out);
 
