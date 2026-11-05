@@ -107,20 +107,40 @@ export async function GET(req: NextRequest) {
       try {
         const p = getProvider();
         const t0 = Date.now();
-        const texto = await p.complete({
-          stable: 'Responda com uma unica palavra.',
+        // 200 tokens, nao 8: um modelo de raciocinio gasta o orcamento pensando
+        // e devolve conteudo vazio, o que pareceria "funcionando" por engano.
+        const pedido = {
+          stable: 'Você narra em português do Brasil.',
           volatile: '',
-          user: 'Diga: pronto',
-          maxTokens: 8,
-          tier: 'fast',
-        });
+          user: 'Escreva uma frase curta sobre chuva num píer.',
+          maxTokens: 200,
+          tier: 'fast' as const,
+        };
+        const texto = await p.complete(pedido);
+        const ms = Date.now() - t0;
+        const limpo = texto.trim();
+
         saida.sonda = {
           feita: true,
           chaveValida: true,
           modelo: p.modelFor('fast'),
-          ms: Date.now() - t0,
-          respondeu: texto.trim().slice(0, 60),
+          ms,
+          gerouTexto: limpo.length > 0,
+          respondeu: limpo.slice(0, 160),
         };
+
+        // Vazio sem erro e' o caso perigoso: passaria por "ok" e entregaria
+        // narracao em branco ao jogador. Investiga e reprova.
+        if (!limpo) {
+          saida.ok = false;
+          const dbg = (p as any).debugComplete;
+          if (typeof dbg === 'function') {
+            saida.sonda = {
+              ...(saida.sonda as object),
+              diagnostico: await dbg.call(p, pedido),
+            };
+          }
+        }
       } catch (e: any) {
         saida.sonda = {
           feita: true,

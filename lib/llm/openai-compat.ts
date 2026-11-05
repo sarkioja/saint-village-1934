@@ -201,4 +201,29 @@ export class OpenAICompatProvider implements LlmProvider {
     if (j?.error) throw new Error(`${this.name}: ${j.error.message || 'erro'}`);
     return j?.choices?.[0]?.message?.content ?? '';
   }
+
+  /**
+   * Chamada crua, para diagnóstico. Devolve o formato da resposta em vez do
+   * texto, para investigar quando um modelo responde vazio sem dar erro —
+   * caso típico de modelo de raciocínio, que coloca a saída noutro campo ou
+   * gasta todo o orçamento de tokens pensando.
+   */
+  async debugComplete(req: LlmRequest, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const res = await this.post(req, false, signal);
+    const j: any = await res.json();
+    const msg = j?.choices?.[0]?.message ?? {};
+    return {
+      modelo: j?.model ?? this.modelFor(req.tier),
+      finishReason: j?.choices?.[0]?.finish_reason ?? null,
+      camposDaMensagem: Object.keys(msg),
+      tamanhoContent: typeof msg.content === 'string' ? msg.content.length : null,
+      amostraContent: typeof msg.content === 'string' ? msg.content.slice(0, 120) : null,
+      // Modelos de raciocínio costumam usar um destes:
+      temReasoning: typeof msg.reasoning === 'string' && msg.reasoning.length > 0,
+      temReasoningContent:
+        typeof msg.reasoning_content === 'string' && msg.reasoning_content.length > 0,
+      amostraReasoning: String(msg.reasoning ?? msg.reasoning_content ?? '').slice(0, 160),
+      usage: j?.usage ?? null,
+    };
+  }
 }
