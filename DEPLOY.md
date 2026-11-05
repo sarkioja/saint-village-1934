@@ -1,4 +1,15 @@
-# Variáveis de ambiente para produção
+# Deploy e configuração
+
+> **Estado em 05/11/2026:** o app está no ar em `saint-village-1934.vercel.app`, com o banco Neon
+> ligado (esquema criado automaticamente) e o narrador funcionando via OpenRouter — verificado por
+> `/api/health?probe=llm`, que fez uma chamada real e recebeu resposta em 770 ms.
+>
+> **Falta um passo:** Deployment Protection ainda está ligada, então visitante anônimo não abre a
+> URL. Veja a seção 4.
+
+---
+
+# Variáveis de ambiente
 
 Cole em **Vercel → projeto `saint-village-1934` → Settings → Environment Variables**. A tela aceita
 colar várias linhas de uma vez (`CHAVE=valor`). Marque os três alvos: *Production*, *Preview* e
@@ -92,12 +103,15 @@ HISTORY_TURNS=18            # entradas do diário enviadas como histórico
 
 ---
 
-## 4. Deployment Protection
+## 4. Deployment Protection — o passo que falta
 
-O projeto está com **Vercel Authentication ligada** (padrão do time). Com ela, visitante anônimo
-não abre a URL — o jogo não fica público.
+O projeto está com **Vercel Authentication ligada** (`ssoProtection: all_except_custom_domains`, o
+padrão do time). Com ela, quem não é do time recebe a tela de login da Vercel em vez do jogo.
 
-**Settings → Deployment Protection → Vercel Authentication → Disabled.**
+**Vercel → projeto → Settings → Deployment Protection → Vercel Authentication → Disabled → Save.**
+
+Para conferir, abra `https://saint-village-1934.vercel.app/` numa janela anônima: tem que aparecer
+a tela de escolha de era, não um login.
 
 ---
 
