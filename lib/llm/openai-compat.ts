@@ -42,7 +42,9 @@ const PRESETS: Record<CompatId, Preset> = {
     baseUrl: 'https://openrouter.ai/api/v1',
     envPrefix: 'OPENROUTER',
     // No OpenRouter o modelo vem com o provedor no nome.
-    fast: 'anthropic/claude-haiku-4.5',
+    // Estes sao apenas os padroes: OPENROUTER_MODEL_FAST e _QUALITY tem
+    // precedencia, entao trocar de modelo nao exige mexer em codigo.
+    fast: 'deepseek/deepseek-v4.1-flash-1017',
     quality: 'anthropic/claude-sonnet-4.5',
     hint: 'OPENROUTER_API_KEY',
   },

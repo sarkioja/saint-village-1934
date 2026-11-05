@@ -108,12 +108,21 @@ describe('provedores OpenAI-compativeis', () => {
     process.env.OPENROUTER_BASE_URL = base;
     process.env.OPENROUTER_SITE_URL = 'https://saint-village.vercel.app';
     const p = new OpenAICompatProvider('openrouter');
-    expect(p.modelFor('quality')).toContain('/'); // ex.: anthropic/claude-sonnet-4.5
+    // No OpenRouter o modelo carrega o provedor no nome.
+    expect(p.modelFor('fast')).toBe('deepseek/deepseek-v4.1-flash-1017');
+    expect(p.modelFor('quality')).toContain('/');
 
     await p.complete(req);
     const c = captured[0];
     expect(c.headers['http-referer']).toBe('https://saint-village.vercel.app');
     expect(c.headers['x-title']).toBe('Saint Village XX Century');
+  });
+
+  it('a variavel de ambiente tem precedencia sobre o modelo padrao', () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-teste';
+    process.env.OPENROUTER_MODEL_FAST = 'outro/modelo-qualquer';
+    const p = new OpenAICompatProvider('openrouter');
+    expect(p.modelFor('fast')).toBe('outro/modelo-qualquer');
   });
 
   it('opencode: exige base URL explicita', () => {
