@@ -107,9 +107,36 @@ npm run build && npm run verify:pixel
 npm run verify:pixel -- --viewport 1280 --era 1934 --tab ficha   # um caso só
 ```
 
-**Resultado no 1280:** 39/41 dentro da tolerância, sendo **33 em exatamente 0,000%** e os demais
-entre 0,009% e 0,020% (antialiasing de alguns pixels). As 2 falhas eram flake do artifact de 6 MB
-não terminando de se desempacotar em 25 s — passam no retry, que o gate agora faz.
+**Resultado: 164/164 em exatamente 0,000%.** Nenhum pixel de diferença em nenhuma das 4 viewports,
+8 abas e 5 eras.
+
+| Viewport | Comparações | Falhas |
+|---|---|---|
+| 390 | 41 | 0 |
+| 768 | 41 | 0 |
+| 1280 | 41 | 0 |
+| 1680 | 41 | 0 |
+
+O artifact de 6 MB às vezes não termina de se desempacotar dentro do tempo; o gate repete o caso
+até 3 vezes antes de reprovar, porque isso é lentidão dele, não divergência de layout.
+
+#### Controles de formulário: comparados pelo DOM, não por pixel
+
+Uma divergência real apareceu no caminho e vale registrar, porque explica uma decisão do gate.
+
+No 390px a aba Dados diferia em 0,14%. Medindo: caixa, padding, fonte, número de opções e opção
+selecionada **idênticos** nos dois lados, com a mesma posição fracionária (453,796875px) — e
+**969 de 969 pixels divergentes dentro de `<select>`, zero fora**. O texto interno de um `<select>`
+é desenhado pelo caminho do controle *nativo* do Chromium, não por CSS, e dois documentos que
+chegam ao mesmo layout por caminhos de reflow diferentes podem pousá-lo um pixel acima ou abaixo.
+
+Afrouxar a tolerância global mascararia regressões de verdade. Em vez disso:
+
+- a **geometria e o conteúdo** dos controles (posição, tamanho, valor, opção selecionada, número de
+  opções) são comparados pelo DOM — o que é **mais rigoroso** que pixel: pega opção errada, valor
+  errado ou tamanho errado, que um diff de imagem poderia deixar passar;
+- e só o **interior** deles é achatado antes do diff, com recuo de 2px, preservando a borda, que é
+  desenhada por CSS e continua sendo comparada.
 
 > Não rode `next build` enquanto o gate estiver no ar: trocar o `.next` debaixo do `next start`
 > esvazia as páginas e derruba todos os casos. O gate compara o `BUILD_ID` antes e depois e avisa
@@ -289,10 +316,22 @@ a mensagem de configuração.
 
 ```bash
 npm run typecheck        # tsc --noEmit
-npm run test             # Vitest: construtor de prompt nas 5 eras
+npm run test             # Vitest: construtor de prompt (5 eras) + rota de narração
 npm run build            # build de produção
 npm run verify:pixel     # 164 comparações contra o HTML original
+npm run test:smoke       # ponta a ponta contra um servidor no ar (ver abaixo)
 ```
+
+O smoke test precisa de um servidor rodando:
+
+```bash
+AUTH_SECRET=$(openssl rand -base64 32) DATA_BACKEND=fs npx next start -p 3102 &
+npm run test:smoke
+```
+
+Ele cobre cadastro, sessão, criação de crônica, lock otimista, progresso derivado, exportação e
+link público — e três controles que um teste de UI não pegaria: rev obsoleto é rejeitado, o link
+anônimo **não** entrega a verdade oculta do caso, e uma conta não enxerga a crônica de outra.
 
 ## Deploy
 

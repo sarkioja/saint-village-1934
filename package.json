@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "verify:pixel": "node tests/pixel/run.mjs",
-    "migrate": "node tools/migrate.mjs"
+    "migrate": "node tools/migrate.mjs",
+    "test:smoke": "node tests/smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",
