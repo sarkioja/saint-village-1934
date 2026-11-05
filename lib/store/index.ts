@@ -82,7 +82,10 @@ export interface DataStore {
   getQuota(subject: string, day: string): Promise<number>;
 
   // ---- links publicos ----
+  /** Cria um link. Se ja' houver um ativo para a cronica, devolve o mesmo. */
   createShare(campaignId: string): Promise<string>;
+  /** Tokens ativos (nao revogados) de uma cronica. */
+  listShares(campaignId: string): Promise<Array<{ token: string; createdAt: string }>>;
   resolveShare(token: string): Promise<string | null>;
   revokeShare(token: string): Promise<void>;
 }

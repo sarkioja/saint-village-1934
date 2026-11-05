@@ -24,6 +24,9 @@ type Campaign = {
   progresso: Progresso;
 };
 
+/** Link público ativo por crônica, carregado sob demanda. */
+type Links = Record<string, string | null>;
+
 const ERAS: Array<[string, string]> = [
   ['1934', 'Lei Seca'],
   ['1946', 'Pós-guerra'],
@@ -46,6 +49,7 @@ export default function CampaignList() {
   const [list, setList] = useState<Campaign[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
+  const [links, setLinks] = useState<Links>({});
 
   async function carregar() {
     try {
@@ -55,7 +59,24 @@ export default function CampaignList() {
         return;
       }
       const j = await res.json();
-      setList(j.campaigns ?? []);
+      const campanhas: Campaign[] = j.campaigns ?? [];
+      setList(campanhas);
+
+      // Quais crônicas estão compartilhadas agora. Sem isso não há como a
+      // pessoa saber o que está público, nem revogar.
+      const estado: Links = {};
+      await Promise.all(
+        campanhas.map(async (c) => {
+          try {
+            const r = await fetch(`/api/campaigns/${c.id}/share`);
+            const d = await r.json();
+            estado[c.id] = d.shares?.[0]?.url ?? null;
+          } catch {
+            estado[c.id] = null;
+          }
+        }),
+      );
+      setLinks(estado);
     } catch {
       setErro('Não foi possível ler suas crônicas.');
     }
@@ -94,6 +115,22 @@ export default function CampaignList() {
     void carregar();
   }
 
+  async function copiar(url: string, aviso: boolean) {
+    const completa = location.origin + url;
+    try {
+      await navigator.clipboard.writeText(completa);
+      window.alert(
+        'Link copiado:\n\n' +
+          completa +
+          (aviso
+            ? '\n\nQuem abrir vê a crônica e a ficha, mas não a verdade oculta do caso nem o segredo do personagem.'
+            : ''),
+      );
+    } catch {
+      window.prompt('Link somente-leitura desta crônica:', completa);
+    }
+  }
+
   async function compartilhar(c: Campaign) {
     const res = await fetch(`/api/campaigns/${c.id}/share`, { method: 'POST' });
     const j = await res.json();
@@ -101,17 +138,24 @@ export default function CampaignList() {
       setErro('Não foi possível criar o link.');
       return;
     }
-    const url = location.origin + j.url;
-    try {
-      await navigator.clipboard.writeText(url);
-      window.alert(
-        'Link copiado:\n\n' +
-          url +
-          '\n\nQuem abrir vê a crônica e a ficha, mas não a verdade oculta do caso nem o segredo do personagem.',
-      );
-    } catch {
-      window.prompt('Link somente-leitura desta crônica:', url);
+    setLinks((l) => ({ ...l, [c.id]: j.url }));
+    await copiar(j.url, true);
+  }
+
+  async function revogar(c: Campaign) {
+    if (
+      !window.confirm(
+        'Fechar o link público desta crônica? Quem já tiver o endereço deixa de conseguir abrir.',
+      )
+    ) {
+      return;
     }
+    const res = await fetch(`/api/campaigns/${c.id}/share`, { method: 'DELETE' });
+    if (!res.ok) {
+      setErro('Não foi possível fechar o link.');
+      return;
+    }
+    setLinks((l) => ({ ...l, [c.id]: null }));
   }
 
   async function apagar(c: Campaign) {
@@ -203,9 +247,20 @@ export default function CampaignList() {
                 <a className="sv-btn-ghost" href={`/api/export/${c.id}`}>
                   Exportar
                 </a>
-                <button className="sv-btn-ghost" onClick={() => compartilhar(c)}>
-                  Link
-                </button>
+                {links[c.id] ? (
+                  <>
+                    <button className="sv-btn-ghost" onClick={() => copiar(links[c.id]!, false)}>
+                      Copiar link
+                    </button>
+                    <button className="sv-btn-danger" onClick={() => revogar(c)}>
+                      Fechar link
+                    </button>
+                  </>
+                ) : (
+                  <button className="sv-btn-ghost" onClick={() => compartilhar(c)}>
+                    Compartilhar
+                  </button>
+                )}
                 <button className="sv-btn-danger" onClick={() => apagar(c)}>
                   Arquivar
                 </button>

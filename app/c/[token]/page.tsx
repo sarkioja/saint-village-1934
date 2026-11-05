@@ -14,7 +14,8 @@ export const dynamic = 'force-dynamic';
  *   - `char.segredo` (o segredo do personagem)
  *   - qualquer ação: a página não tem um único controle
  *
- * O link é revogável pelo dono no perfil.
+ * O link é revogável: na lista de crônicas, "Fechar link" derruba o acesso
+ * para quem já tiver o endereço.
  */
 export default async function Page({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;

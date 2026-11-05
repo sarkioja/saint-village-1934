@@ -172,13 +172,36 @@ export class FsStore implements DataStore {
 
   // --------------------------------------------------------- links publicos
 
+  /** Idempotente, igual ao backend SQL: um link ativo por cronica. */
   async createShare(campaignId: string): Promise<string> {
+    const ativos = await this.listShares(campaignId);
+    if (ativos.length) return ativos[0].token;
+
     const token = randomBytes(16).toString('base64url');
     await this.writeJson(this.p('shares', token + '.json'), {
       campaignId,
       createdAt: new Date().toISOString(),
     });
     return token;
+  }
+
+  async listShares(campaignId: string): Promise<Array<{ token: string; createdAt: string }>> {
+    let nomes: string[] = [];
+    try {
+      nomes = await readdir(this.p('shares'));
+    } catch {
+      return [];
+    }
+    const out: Array<{ token: string; createdAt: string }> = [];
+    for (const n of nomes.filter((n) => n.endsWith('.json'))) {
+      const s = await this.readJson<{ campaignId: string; createdAt: string; revokedAt?: string }>(
+        this.p('shares', n),
+      );
+      if (s && s.campaignId === campaignId && !s.revokedAt) {
+        out.push({ token: n.replace(/\.json$/, ''), createdAt: s.createdAt });
+      }
+    }
+    return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   async resolveShare(token: string): Promise<string | null> {

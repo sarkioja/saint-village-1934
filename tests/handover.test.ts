@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { SqlStore } from '@/lib/store/sql';
-// @ts-expect-error — módulo .mjs compartilhado com os scripts de linha de comando
 import { exportar, importar } from '@/lib/store/handover.mjs';
 
 /**

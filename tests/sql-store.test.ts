@@ -181,6 +181,40 @@ describe('links publicos', () => {
     expect(await store.resolveShare('token-que-nao-existe')).toBeNull();
   });
 
+  it('criar duas vezes devolve o MESMO link', async () => {
+    // Antes isto cunhava um token novo a cada clique: varios links vivos e
+    // permanentes, e revogar um nao fechava os outros.
+    const u = await novoUsuario();
+    const c = await store.createCampaign(u.id, '1934', 'Caso', {});
+    const a = await store.createShare(c.id);
+    const b = await store.createShare(c.id);
+    expect(b).toBe(a);
+    expect(await store.listShares(c.id)).toHaveLength(1);
+  });
+
+  it('depois de revogar, criar de novo da um link diferente', async () => {
+    const u = await novoUsuario();
+    const c = await store.createCampaign(u.id, '1934', 'Caso', {});
+    const a = await store.createShare(c.id);
+    await store.revokeShare(a);
+    expect(await store.listShares(c.id)).toHaveLength(0);
+
+    const b = await store.createShare(c.id);
+    expect(b).not.toBe(a);
+    // O link antigo continua morto.
+    expect(await store.resolveShare(a)).toBeNull();
+    expect(await store.resolveShare(b)).toBe(c.id);
+  });
+
+  it('listShares nao mistura cronicas', async () => {
+    const u = await novoUsuario();
+    const c1 = await store.createCampaign(u.id, '1934', 'A', {});
+    const c2 = await store.createCampaign(u.id, '1946', 'B', {});
+    const t1 = await store.createShare(c1.id);
+    await store.createShare(c2.id);
+    expect((await store.listShares(c1.id)).map((x) => x.token)).toEqual([t1]);
+  });
+
   it('apagar a cronica leva os links junto', async () => {
     const u = await novoUsuario();
     const c = await store.createCampaign(u.id, '1934', 'Caso', {});

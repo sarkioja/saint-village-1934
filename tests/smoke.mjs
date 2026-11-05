@@ -68,16 +68,24 @@ r = await j(`/api/campaigns/${id}/share`, { method: 'POST' });
 ok(r.status === 200 && r.body.token, `link publico criado`);
 const token = r.body.token;
 
+// 9b. criar de novo devolve o MESMO link (nao cunha outro token vivo)
+r = await j(`/api/campaigns/${id}/share`, { method: 'POST' });
+ok(r.body.token === token, 'criar link duas vezes devolve o mesmo');
+r = await j(`/api/campaigns/${id}/share`);
+ok(r.body.shares?.length === 1, `so um link ativo (${r.body.shares?.length})`);
+
 // 10. anonimo le, SEM o segredo
 const anon = await fetch(B + `/c/${token}`);
 const html = await anon.text();
 ok(anon.status === 200 && html.includes('A chuva chega de lado'), 'anonimo le a cronica');
 ok(!html.includes('o bilhete e do delegado'), 'anonimo NAO ve a verdade oculta');
 
-// 11. revogacao
-r = await j(`/api/campaigns/${id}/share?token=${token}`, { method: 'DELETE' });
-ok(r.status === 200, 'link revogado');
+// 11. revogacao sem token fecha todos os links da cronica
+r = await j(`/api/campaigns/${id}/share`, { method: 'DELETE' });
+ok(r.status === 200 && r.body.revogados === 1, `link revogado (${r.body.revogados})`);
 ok((await fetch(B + `/c/${token}`)).status === 404, 'link revogado da 404');
+r = await j(`/api/campaigns/${id}/share`);
+ok(r.body.shares?.length === 0, 'nenhum link ativo depois de revogar');
 
 // 12. cronica de outro usuario
 cookie = '';

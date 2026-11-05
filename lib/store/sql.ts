@@ -159,10 +159,31 @@ export class SqlStore implements DataStore {
 
   // --------------------------------------------------------- links publicos
 
+  /**
+   * Idempotente: se a cronica ja' tem um link ativo, devolve o mesmo em vez de
+   * cunhar outro. Sem isso, cada clique no botao criaria mais um token vivo e
+   * permanente, e revogar um nao fecharia os demais.
+   */
   async createShare(campaignId: string): Promise<string> {
+    const existente = await this.q(
+      `SELECT token FROM shares WHERE campaign_id = $1 AND revoked_at IS NULL
+        ORDER BY created_at LIMIT 1`,
+      [campaignId],
+    );
+    if (existente.length) return existente[0].token;
+
     const token = randomBytes(16).toString('base64url');
     await this.q(`INSERT INTO shares (token, campaign_id) VALUES ($1, $2)`, [token, campaignId]);
     return token;
+  }
+
+  async listShares(campaignId: string): Promise<Array<{ token: string; createdAt: string }>> {
+    const rows = await this.q(
+      `SELECT token, created_at FROM shares
+        WHERE campaign_id = $1 AND revoked_at IS NULL ORDER BY created_at`,
+      [campaignId],
+    );
+    return rows.map((r) => ({ token: r.token, createdAt: new Date(r.created_at).toISOString() }));
   }
 
   async resolveShare(token: string): Promise<string | null> {
