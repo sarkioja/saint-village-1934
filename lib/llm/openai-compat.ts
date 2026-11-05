@@ -42,10 +42,12 @@ const PRESETS: Record<CompatId, Preset> = {
     baseUrl: 'https://openrouter.ai/api/v1',
     envPrefix: 'OPENROUTER',
     // No OpenRouter o modelo vem com o provedor no nome.
-    // Estes sao apenas os padroes: OPENROUTER_MODEL_FAST e _QUALITY tem
-    // precedencia, entao trocar de modelo nao exige mexer em codigo.
+    // Os dois tiers usam o mesmo modelo por escolha do dono do projeto: o
+    // seletor "rapido / apurado" do perfil continua existindo, mas hoje leva
+    // ao mesmo lugar. Para diferenciar de novo, basta definir
+    // OPENROUTER_MODEL_QUALITY — as env tem precedencia sobre estes padroes.
     fast: 'deepseek/deepseek-v4.1-flash-1017',
-    quality: 'anthropic/claude-sonnet-4.5',
+    quality: 'deepseek/deepseek-v4.1-flash-1017',
     hint: 'OPENROUTER_API_KEY',
   },
   opencode: {

@@ -108,9 +108,9 @@ describe('provedores OpenAI-compativeis', () => {
     process.env.OPENROUTER_BASE_URL = base;
     process.env.OPENROUTER_SITE_URL = 'https://saint-village.vercel.app';
     const p = new OpenAICompatProvider('openrouter');
-    // No OpenRouter o modelo carrega o provedor no nome.
+    // Os dois tiers apontam para o mesmo modelo, por escolha do projeto.
     expect(p.modelFor('fast')).toBe('deepseek/deepseek-v4.1-flash-1017');
-    expect(p.modelFor('quality')).toContain('/');
+    expect(p.modelFor('quality')).toBe('deepseek/deepseek-v4.1-flash-1017');
 
     await p.complete(req);
     const c = captured[0];
@@ -123,6 +123,14 @@ describe('provedores OpenAI-compativeis', () => {
     process.env.OPENROUTER_MODEL_FAST = 'outro/modelo-qualquer';
     const p = new OpenAICompatProvider('openrouter');
     expect(p.modelFor('fast')).toBe('outro/modelo-qualquer');
+  });
+
+  it('OPENROUTER_MODEL_QUALITY volta a separar os tiers', () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-teste';
+    process.env.OPENROUTER_MODEL_QUALITY = 'anthropic/claude-sonnet-4.5';
+    const p = new OpenAICompatProvider('openrouter');
+    expect(p.modelFor('fast')).toBe('deepseek/deepseek-v4.1-flash-1017');
+    expect(p.modelFor('quality')).toBe('anthropic/claude-sonnet-4.5');
   });
 
   it('opencode: exige base URL explicita', () => {

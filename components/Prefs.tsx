@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type P = { tamanhoNarracao?: string; modeloIA?: string };
 
@@ -12,6 +12,26 @@ export default function Prefs({ initial }: { initial: P }) {
   const [tam, setTam] = useState(initial.tamanhoNarracao || 'medio');
   const [mod, setMod] = useState(initial.modeloIA || 'haiku');
   const [estado, setEstado] = useState<'' | 'salvando' | 'salvo'>('');
+
+  // Quais modelos cada opção usa de verdade. Vem de /api/health, que já expõe
+  // isso sem segredo nenhum. Sem isto, "Rápido / Apurado" poderia estar
+  // apontando para o mesmo modelo e o seletor mentiria para quem escolhe.
+  const [modelos, setModelos] = useState<{ rapido?: string; apurado?: string }>({});
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((j) => {
+        if (!vivo) return;
+        setModelos({ rapido: j?.narrador?.modeloRapido, apurado: j?.narrador?.modeloApurado });
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const iguais = !!modelos.rapido && modelos.rapido === modelos.apurado;
 
   async function salvar(next: P) {
     setEstado('salvando');
@@ -52,15 +72,18 @@ export default function Prefs({ initial }: { initial: P }) {
             void salvar({ modeloIA: e.target.value });
           }}
         >
-          <option value="haiku">Rápido</option>
-          <option value="sonnet">Apurado</option>
+          <option value="haiku">Rápido{modelos.rapido ? ` — ${modelos.rapido}` : ''}</option>
+          <option value="sonnet">Apurado{modelos.apurado ? ` — ${modelos.apurado}` : ''}</option>
         </select>
       </label>
 
       <div className="sv-note" style={{ marginTop: 28, maxWidth: 320 }}>
         {estado === 'salvando' && 'Anotando…'}
         {estado === 'salvo' && 'Anotado.'}
-        {!estado && 'Narrações curtas custam menos tokens; o narrador apurado escreve melhor e custa mais.'}
+        {!estado && iguais &&
+          'Nesta instalação as duas opções usam o mesmo modelo, então a escolha não muda nada por enquanto.'}
+        {!estado && !iguais &&
+          'Narrações curtas custam menos tokens; o narrador apurado escreve melhor e custa mais.'}
       </div>
     </div>
   );
