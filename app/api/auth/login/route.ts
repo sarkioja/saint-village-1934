@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { accountsEnabled, ACCOUNTS_OFF_MESSAGE } from '@/lib/store/availability';
 import { getStore } from '@/lib/store';
 import { verifyPassword } from '@/lib/auth/password';
 import { issue, setSessionCookie } from '@/lib/auth/session';
@@ -6,6 +7,9 @@ import { issue, setSessionCookie } from '@/lib/auth/session';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  if (!accountsEnabled()) {
+    return Response.json({ error: 'accounts_off', message: ACCOUNTS_OFF_MESSAGE }, { status: 503 });
+  }
   const body = await req.json().catch(() => null);
   const email = String(body?.email ?? '').trim().toLowerCase();
   const password = String(body?.password ?? '');

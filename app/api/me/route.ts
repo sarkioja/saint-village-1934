@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server';
 import { getStore } from '@/lib/store';
 import { getSession } from '@/lib/auth/session';
+import { accountsEnabled } from '@/lib/store/availability';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
+  if (!accountsEnabled()) return Response.json({ user: null, accountsEnabled: false });
   const session = await getSession();
-  if (!session) return Response.json({ user: null });
+  if (!session) return Response.json({ user: null, accountsEnabled: true });
   const store = await getStore();
   const u = await store.getUser(session.userId);
   if (!u) return Response.json({ user: null });

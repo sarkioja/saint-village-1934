@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { accountsEnabled, ACCOUNTS_OFF_MESSAGE } from '@/lib/store/availability';
 import { getStore } from '@/lib/store';
 import { getSession } from '@/lib/auth/session';
 
@@ -6,6 +7,9 @@ export const runtime = 'nodejs';
 
 /** Lista as cronicas da conta, com o progresso derivado do proprio estado. */
 export async function GET() {
+  if (!accountsEnabled()) {
+    return Response.json({ error: 'accounts_off', message: ACCOUNTS_OFF_MESSAGE }, { status: 503 });
+  }
   const session = await getSession();
   if (!session) return Response.json({ error: 'nao autenticado' }, { status: 401 });
 
@@ -43,6 +47,9 @@ export async function GET() {
 
 /** Cria uma cronica. Aceita um estado inicial (usado ao importar o save da demo). */
 export async function POST(req: NextRequest) {
+  if (!accountsEnabled()) {
+    return Response.json({ error: 'accounts_off', message: ACCOUNTS_OFF_MESSAGE }, { status: 503 });
+  }
   const session = await getSession();
   if (!session) return Response.json({ error: 'nao autenticado' }, { status: 401 });
 

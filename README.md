@@ -345,3 +345,18 @@ Envs obrigatórias em produção: `ANTHROPIC_API_KEY`, `AUTH_SECRET`, `DATA_BACK
 
 > O **plano Hobby da Vercel é restrito a uso não comercial** pelos termos deles. Enquanto o jogo for
 > gratuito, tudo certo; no dia em que cobrar algo, a Vercel passa a exigir o Pro.
+
+### O que cada credencial destrava
+
+O app sobe e funciona por etapas — não é tudo ou nada:
+
+| Com | O que funciona |
+|---|---|
+| nada | A interface inteira, navegável nas 5 eras e 8 abas. Sem narração, sem contas. |
+| `ANTHROPIC_API_KEY` | **O jogo completo em modo demo**: narração, dados, pistas, geração de PdD. O progresso fica no navegador. |
+| `+ DATABASE_URL` | Contas, área de membro, N crônicas por era, exportação, link público, painel do século. |
+
+Sem um banco durável configurado, as contas se **desligam explicitamente**: o cadastro responde 503
+com uma mensagem clara e o chip de conta some, em vez de aceitar um cadastro que sumiria depois (o
+backend de arquivo é efêmero em serverless). O critério é `VERCEL=1`, não `NODE_ENV`, porque num
+servidor próprio o disco persiste e o backend de arquivo é legítimo.

@@ -13,6 +13,7 @@ import Link from 'next/link';
  */
 export default function AccountChip() {
   const [nome, setNome] = useState<string | null>(null);
+  const [ligado, setLigado] = useState(true);
   const [pronto, setPronto] = useState(false);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function AccountChip() {
       .then((j) => {
         if (!vivo) return;
         setNome(j?.user ? j.user.nome || j.user.email.split('@')[0] : null);
+        if (j && j.accountsEnabled === false) setLigado(false);
         setPronto(true);
       })
       .catch(() => vivo && setPronto(true));
@@ -30,7 +32,8 @@ export default function AccountChip() {
     };
   }, []);
 
-  if (!pronto) return null;
+  // Sem backend duravel configurado, nao ha' conta a oferecer.
+  if (!pronto || !ligado) return null;
 
   return (
     <div
