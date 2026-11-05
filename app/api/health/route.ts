@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import type { NextRequest } from 'next/server';
 import { getProvider, LlmConfigError, PROVIDERS } from '@/lib/llm';
 import { getStore, today } from '@/lib/store';
 import { accountsEnabled } from '@/lib/store/availability';
@@ -18,7 +20,7 @@ export const dynamic = 'force-dynamic';
  * escolhido e quais modelos ele usaria — nomes de modelo e cotas não são
  * segredo, são justamente o que precisa ser conferido.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const saida: Record<string, unknown> = {
     ok: true,
     versao: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
@@ -80,6 +82,84 @@ export async function GET() {
     charsDoLivroNoPrompt: Number(process.env.BOOK_CONTEXT_CHARS || 11000),
     entradasDeHistorico: Number(process.env.HISTORY_TURNS || 18),
   };
+
+  // ---- sonda opcional: ?probe=llm ----
+  //
+  // `pronto: true` acima so' diz que a chave existe, nao que ela vale. A sonda
+  // faz uma chamada minima de verdade e prova a ponta a ponta.
+  //
+  // Custa tokens, entao consome uma unidade da mesma cota diaria por IP que
+  // protege a demo: um bot nao transforma este endpoint em gasto.
+  if (new URL(req.url).searchParams.get('probe') === 'llm') {
+    const ip = (req.headers.get('x-forwarded-for') || '0.0.0.0').split(',')[0].trim();
+    const subject = `probe:${createHash('sha256').update(ip).digest('hex')}`;
+    const teto = Number(process.env.DEMO_TURNS_PER_IP || 5);
+    let usadas = 0;
+    try {
+      usadas = await (await getStore()).bumpQuota(subject, today());
+    } catch {
+      usadas = 0;
+    }
+
+    if (usadas > teto) {
+      saida.sonda = { feita: false, motivo: `cota de sondas esgotada hoje (${teto} por IP)` };
+    } else {
+      try {
+        const p = getProvider();
+        const t0 = Date.now();
+        const texto = await p.complete({
+          stable: 'Responda com uma unica palavra.',
+          volatile: '',
+          user: 'Diga: pronto',
+          maxTokens: 8,
+          tier: 'fast',
+        });
+        saida.sonda = {
+          feita: true,
+          chaveValida: true,
+          modelo: p.modelFor('fast'),
+          ms: Date.now() - t0,
+          respondeu: texto.trim().slice(0, 60),
+        };
+      } catch (e: any) {
+        saida.sonda = {
+          feita: true,
+          chaveValida: false,
+          erro: String(e?.message || e).slice(0, 300),
+        };
+        saida.ok = false;
+      }
+    }
+  }
+
+  // Em vez de so' apontar o que falta, diz o que fazer a respeito — quem le
+  // isto costuma estar no meio da configuracao, nao depurando o codigo.
+  const façaIsto: string[] = [];
+  if (!(llm as any).pronto) {
+    façaIsto.push(
+      `Defina a chave do provedor "${escolhido}" nas variáveis de ambiente do projeto. ` +
+        `Para usar outro, mude LLM_PROVIDER para um de: ${PROVIDERS.join(', ')}.`,
+    );
+  }
+  if (!process.env.LLM_PROVIDER) {
+    façaIsto.push(
+      'LLM_PROVIDER não está definida, então o app assume "claude". Se a chave que você ' +
+        'cadastrou é de outro provedor, a narração vai falhar até você definir essa variável.',
+    );
+  }
+  if (!accountsEnabled()) {
+    façaIsto.push(
+      'Nenhuma URL de Postgres foi encontrada. Provisione um banco no projeto (a integração ' +
+        'injeta a URL sozinha); as contas ficam desligadas até lá, e o jogo roda em modo demo.',
+    );
+  }
+  if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 32) {
+    façaIsto.push(
+      'Defina AUTH_SECRET com 32+ caracteres (gere com: openssl rand -base64 32). ' +
+        'Sem ela, cadastro e login falham.',
+    );
+  }
+  if (façaIsto.length) saida.façaIsto = façaIsto;
 
   return Response.json(saida, { status: saida.ok ? 200 : 503 });
 }
