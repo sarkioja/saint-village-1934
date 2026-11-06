@@ -314,12 +314,19 @@ da variável de chave, modelos padrão e cabeçalhos. `opencode` é o genérico:
 `OPENCODE_BASE_URL` para OpenCode Zen, Vercel AI Gateway, Ollama, LM Studio ou qualquer outro
 compatível. Trocar de provedor é mexer em variável, sem deploy.
 
-Dois detalhes que o adapter trata sozinho:
+Três detalhes que o adapter trata sozinho:
 
 - **`max_completion_tokens`** — alguns modelos de raciocínio da OpenAI recusam `max_tokens`. Em vez
   de perder o turno, o adapter repete a chamada com o campo que o modelo aceita.
 - **Erro no meio do stream** — o OpenRouter pode mandar um objeto de erro já dentro do SSE; ele vira
   exceção, não texto narrado.
+- **Raciocínio desligado no OpenRouter** — achado pela sonda em produção, não por suposição: o
+  `deepseek-v4.1-flash` devolvia `finish_reason: "length"` com **769 dos 1.000 tokens de saída
+  gastos em raciocínio**, sobrando ~231 para a prosa, e a cena chegava ao jogador cortada no meio
+  de uma frase. O orçamento de 1.000 é o do artifact original e é de sobra para as 260 palavras do
+  tamanho "longo" — o que o estourava era o modelo pensando dentro dele. O adapter manda
+  `reasoning: { enabled: false }` e repete sem o parâmetro se o endpoint reclamar. Para reativar,
+  `OPENROUTER_REASONING=on` — e suba o orçamento junto, ou o corte volta.
 
 **O `claude` é o único com prompt caching**, que corta ~2/3 da entrada por turno (§4.2). Nos
 provedores OpenAI-compatíveis o protocolo não tem `cache_control`, então os dois blocos de system
