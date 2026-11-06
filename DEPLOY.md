@@ -1,11 +1,24 @@
 # Deploy e configuração
 
-> **Estado em 05/11/2026:** o app está no ar em `saint-village-1934.vercel.app`, com o banco Neon
-> ligado (esquema criado automaticamente) e o narrador funcionando via OpenRouter — verificado por
-> `/api/health?probe=llm`, que fez uma chamada real e recebeu resposta em 770 ms.
+> **Estado em 06/11/2026:** a versão do designer está no ar em `saint-village-1934.vercel.app`,
+> com o banco Neon ligado (esquema criado automaticamente) e o narrador funcionando via OpenRouter
+> — verificado por `/api/health?probe=llm`, que fez uma chamada real e recebeu 149 palavras
+> íntegras em 1,9 s.
 >
-> **Falta um passo:** Deployment Protection ainda está ligada, então visitante anônimo não abre a
-> URL. Veja a seção 4.
+> **Faltam duas coisas, as duas com você:**
+>
+> 1. **Deployment Protection** ainda está ligada, então visitante anônimo não abre a URL. É o
+>    último passo entre o projeto e o público. Veja a seção 4.
+> 2. **Os 19 arquivos de mídia** (6 fundos, 11 faixas, 1 efeito). O app está construído como se
+>    existissem; `curl -s <url>/api/health | jq .midia` lista nominalmente o que falta e em que
+>    pasta cada um entra. Veja a seção correspondente no README.
+>
+> **Um defeito encontrado e corrigido na verificação:** a sonda flagrou a narração cortada no meio
+> de uma frase. O diagnóstico deu o número: `finish_reason: "length"`, 1.000 tokens de saída, **769
+> deles de raciocínio** — sobravam ~231 para a prosa. Não era variação: toda narração real sairia
+> cortada. O adapter agora manda `reasoning: { enabled: false }` ao OpenRouter, e repete sem o
+> parâmetro se o endpoint reclamar dele. Para reativar num modelo em que o raciocínio compense,
+> `OPENROUTER_REASONING=on` — e suba o orçamento junto, ou o corte volta.
 
 ---
 

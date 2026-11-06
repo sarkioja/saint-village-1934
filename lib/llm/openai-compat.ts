@@ -112,11 +112,34 @@ export class OpenAICompatProvider implements LlmProvider {
   }
 
   /**
+   * Raciocinio desligado — padrao no OpenRouter.
+   *
+   * MEDIDO em producao, com o deepseek-v4.1-flash: `finish_reason: "length"`,
+   * `completion_tokens: 1000`, dos quais **769 de raciocinio**. Sobravam ~231
+   * para a prosa, e a narracao chegava ao jogador cortada no meio de uma frase.
+   * O orcamento de 1.000 e' o do artifact original e e' de sobra para 260
+   * palavras; o que o estourava era o modelo pensando dentro dele.
+   *
+   * `reasoning: { enabled: false }` e' o parametro unificado do OpenRouter.
+   * Para reativar num modelo em que o raciocinio valha a pena, defina
+   * OPENROUTER_REASONING=on — e suba o orcamento junto, ou o corte volta.
+   */
+  private get desligarRaciocinio(): boolean {
+    if (this.name !== 'openrouter') return false;
+    return (process.env.OPENROUTER_REASONING || 'off').toLowerCase() !== 'on';
+  }
+
+  /**
    * Alguns modelos de raciocinio da OpenAI rejeitam `max_tokens` e exigem
    * `max_completion_tokens`. Mandamos o primeiro e, num 400 que reclame disso,
    * repetimos com o segundo — em vez de perder o turno do jogador.
    */
-  private payload(req: LlmRequest, stream: boolean, useCompletionTokens: boolean) {
+  private payload(
+    req: LlmRequest,
+    stream: boolean,
+    useCompletionTokens: boolean,
+    semRaciocinio: boolean,
+  ) {
     const limit = useCompletionTokens
       ? { max_completion_tokens: req.maxTokens }
       : { max_tokens: req.maxTokens };
@@ -124,6 +147,7 @@ export class OpenAICompatProvider implements LlmProvider {
       model: this.modelFor(req.tier),
       stream,
       ...limit,
+      ...(semRaciocinio ? { reasoning: { enabled: false } } : {}),
       messages: [
         { role: 'system', content: [req.stable, req.volatile].filter(Boolean).join('\n\n') },
         { role: 'user', content: req.user },
@@ -131,9 +155,17 @@ export class OpenAICompatProvider implements LlmProvider {
     };
   }
 
+  /**
+   * Cada 400 especifico derruba so' o campo de que ele reclama, e a chamada e'
+   * repetida — em vez de perder o turno do jogador porque um endpoint
+   * compativel nao aceita exatamente a mesma forma que o outro.
+   */
   private async post(req: LlmRequest, stream: boolean, signal?: AbortSignal): Promise<Response> {
+    let semRaciocinio = this.desligarRaciocinio;
+    let useCompletionTokens = false;
     let lastErr = '';
-    for (const useCompletionTokens of [false, true]) {
+
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
       const res = await fetch(`${this.base}/chat/completions`, {
         method: 'POST',
         signal,
@@ -142,15 +174,24 @@ export class OpenAICompatProvider implements LlmProvider {
           ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
           ...this.extraHeaders,
         },
-        body: JSON.stringify(this.payload(req, stream, useCompletionTokens)),
+        body: JSON.stringify(this.payload(req, stream, useCompletionTokens, semRaciocinio)),
       });
       if (res.ok) return res;
 
       const body = await res.text().catch(() => '');
       lastErr = `${res.status}: ${body.slice(0, 300)}`;
-      const pedeOutroCampo =
-        res.status === 400 && /max_completion_tokens|max_tokens.*not supported/i.test(body);
-      if (!useCompletionTokens && pedeOutroCampo) continue;
+      if (res.status === 400 && semRaciocinio && /reasoning/i.test(body)) {
+        semRaciocinio = false;
+        continue;
+      }
+      if (
+        res.status === 400 &&
+        !useCompletionTokens &&
+        /max_completion_tokens|max_tokens.*not supported/i.test(body)
+      ) {
+        useCompletionTokens = true;
+        continue;
+      }
       break;
     }
     throw new Error(`${this.name} ${lastErr}`);

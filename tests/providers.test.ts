@@ -43,8 +43,17 @@ beforeAll(async () => {
 
 afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
+const RESPOSTA_PADRAO = () => ({
+  status: 200,
+  body: JSON.stringify({ choices: [{ message: { content: 'ok' } }] }),
+});
+
 beforeEach(() => {
   captured = [];
+  // Restaurar aqui, e nao no fim de cada teste: um teste que falha no meio
+  // deixava o stub de erro ligado e derrubava o teste seguinte, que nao tinha
+  // nada a ver com o problema.
+  respond = RESPOSTA_PADRAO;
   for (const k of Object.keys(process.env)) {
     if (/^(OPENAI|OPENROUTER|OPENCODE)_/.test(k)) delete process.env[k];
   }
@@ -100,7 +109,6 @@ describe('provedores OpenAI-compativeis', () => {
     expect(captured[0].body.max_completion_tokens).toBeUndefined();
     expect(captured[1].body.max_completion_tokens).toBe(1000);
     expect(captured[1].body.max_tokens).toBeUndefined();
-    respond = () => ({ status: 200, body: JSON.stringify({ choices: [{ message: { content: 'ok' } }] }) });
   });
 
   it('openrouter: manda os cabecalhos de atribuicao e aceita modelo com provedor no nome', async () => {
@@ -116,6 +124,47 @@ describe('provedores OpenAI-compativeis', () => {
     const c = captured[0];
     expect(c.headers['http-referer']).toBe('https://saint-village.vercel.app');
     expect(c.headers['x-title']).toBe('Saint Village XX Century');
+  });
+
+  it('openrouter: desliga o raciocinio, que comia o orcamento da narracao', async () => {
+    // Medido em producao com o deepseek-v4.1-flash: finish_reason "length",
+    // 1.000 tokens de saida, 769 deles de raciocinio — e a cena do jogador
+    // chegava cortada no meio de uma frase.
+    process.env.OPENROUTER_API_KEY = 'sk-or-teste';
+    process.env.OPENROUTER_BASE_URL = base;
+    await new OpenAICompatProvider('openrouter').complete(req);
+    expect(captured[0].body.reasoning).toEqual({ enabled: false });
+    expect(captured[0].body.max_tokens).toBe(1000);
+  });
+
+  it('openrouter: OPENROUTER_REASONING=on devolve o raciocinio', async () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-teste';
+    process.env.OPENROUTER_BASE_URL = base;
+    process.env.OPENROUTER_REASONING = 'on';
+    await new OpenAICompatProvider('openrouter').complete(req);
+    expect(captured[0].body.reasoning).toBeUndefined();
+  });
+
+  it('openai: nao recebe o parametro, que e' + " e' do OpenRouter", async () => {
+    process.env.OPENAI_API_KEY = 'sk-teste';
+    process.env.OPENAI_BASE_URL = base;
+    await new OpenAICompatProvider('openai').complete(req);
+    expect(captured[0].body.reasoning).toBeUndefined();
+  });
+
+  it('um 400 reclamando de reasoning repete sem ele, em vez de perder o turno', async () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-teste';
+    process.env.OPENROUTER_BASE_URL = base;
+    respond = (n) =>
+      n === 1
+        ? { status: 400, body: JSON.stringify({ error: { message: 'unsupported parameter: reasoning' } }) }
+        : { status: 200, body: JSON.stringify({ choices: [{ message: { content: 'veio' } }] }) };
+    const txt = await new OpenAICompatProvider('openrouter').complete(req);
+    expect(txt).toBe('veio');
+    expect(captured).toHaveLength(2);
+    expect(captured[0].body.reasoning).toEqual({ enabled: false });
+    expect(captured[1].body.reasoning).toBeUndefined();
+    expect(captured[1].body.max_tokens).toBe(1000);
   });
 
   it('a variavel de ambiente tem precedencia sobre o modelo padrao', () => {
