@@ -142,6 +142,9 @@ function interp(rawIn, scope) {
 
 // ------------------------------------------------------------ regras de hover
 
+/** Campos de uma linha classificados por familia (ver familiaDeCampo). */
+const campos = [];
+
 const hoverRules = [];
 function addHoverRule(decls) {
   const cls = 'svh-' + hoverRules.length;
@@ -169,9 +172,33 @@ function emitStyle(raw, scope) {
   return '{' + parts.join(', ') + '}' + (custom ? ' as React.CSSProperties' : '');
 }
 
+/**
+ * Familia visual de um campo de uma linha, lida do style inline do designer.
+ *
+ * E a mesma leitura que o olho faz: `border:` nos quatro lados e um campo com
+ * caixa; `border:none` mais `border-bottom:` e um campo sublinhado. A classe
+ * resultante e o gancho de app/campos.css, que iguala altura e recuo dentro de
+ * cada familia — ver o comentario de la para os numeros medidos.
+ *
+ * Devolve null para o que nao e campo de uma linha (textarea, checkbox, o
+ * range do player) ou nao tem style inline (o .svr-sel ja nasce canonico).
+ */
+function familiaDeCampo(tag, attribs) {
+  if (tag !== 'select' && tag !== 'input') return null;
+  const tipo = (attribs.type || 'text').toLowerCase();
+  const TEXTO = ['text', 'search', 'tel', 'url', 'email', 'number', 'password'];
+  if (tag === 'input' && !TEXTO.includes(tipo)) return null;
+  const style = attribs.style || '';
+  if (/(^|;)\s*border\s*:\s*(?!none)/.test(style)) return 'svf-box';
+  if (/(^|;)\s*border-bottom\s*:/.test(style)) return 'svf-line';
+  return null;
+}
+
 function emitAttrs(node, scope) {
   const out = [];
   let hoverClass = null;
+  const familia = familiaDeCampo(TAG_MAP[node.name] || node.name, node.attribs);
+  if (familia) campos.push(familia);
   // O v2 passou a usar class= e style-hover no MESMO elemento. Emitir os dois
   // daria dois className no JSX — erro de compilacao, e em runtime o React
   // ficaria so com o ultimo, perdendo as classes do template.
@@ -243,7 +270,14 @@ function emitAttrs(node, scope) {
         if (t !== 'true' && t !== 'false' && t !== '' && t !== reactName) {
           throw new Error(`${reactName} nao e' booleano: ${JSON.stringify(raw)}`);
         }
-        out.push(`${reactName}={${t === 'false' ? 'false' : 'true'}}`);
+        // `open=""` e' FALSO, nao verdadeiro. Em HTML puro a presenca do
+        // atributo bastaria, mas o artifact tambem e' React: ele entrega o
+        // valor do template como string, e o React omite o atributo booleano
+        // quando a string e' vazia. Medido no gate — os <details class=
+        // "sv-step" open=""> do original renderizam FECHADOS, e emiti-los
+        // abertos esticava a aba Ficha de 995px para 1719px.
+        const vera = t === 'true' || t === reactName;
+        out.push(`${reactName}={${vera}}`);
         continue;
       }
     }
@@ -251,12 +285,13 @@ function emitAttrs(node, scope) {
     out.push(`${reactName}={${interp(raw, scope)}}`);
   }
 
-  if (classAttr && hoverClass) {
-    out.push('className={' + classAttr + ' + ' + JSON.stringify(' ' + hoverClass) + '}');
+  const classes = [hoverClass, familia].filter(Boolean).join(' ');
+  if (classAttr && classes) {
+    out.push('className={' + classAttr + ' + ' + JSON.stringify(' ' + classes) + '}');
   } else if (classAttr) {
     out.push('className={' + classAttr + '}');
-  } else if (hoverClass) {
-    out.push(`className=${JSON.stringify(hoverClass)}`);
+  } else if (classes) {
+    out.push(`className=${JSON.stringify(classes)}`);
   }
   return out.length ? ' ' + out.join(' ') : '';
 }
@@ -417,6 +452,8 @@ const report = {
   'handlers no template': count(/sc-camel-on-/g),
   'handlers emitidos': (tsx.match(/\bon[A-Z][A-Za-z]*=\{/g) || []).length,
   'sc-raw-select -> select': count(/<sc-raw-select[\s>]/g),
+  'campos com caixa (svf-box)': campos.filter((c) => c === 'svf-box').length,
+  'campos sublinhados (svf-line)': campos.filter((c) => c === 'svf-line').length,
   'atributos sc-camel-* (nao-evento)': count(/sc-camel-(?!on-)[a-z-]+=/g),
   'elementos SVG no DOM': (tsx.match(/<(svg|defs|filter|fe[A-Z][A-Za-z]*|animate|linearGradient|stop|path|rect|g)[\s/>]/g) || []).length,
 };

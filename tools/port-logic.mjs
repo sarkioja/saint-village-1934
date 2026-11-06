@@ -264,10 +264,29 @@ const GEN_NPC_NOVO = `      genNpc:async()=>{ if(this.state.busy) return; this.s
         }catch(err){ this.addLog({k:'mech',who:'Erro',text:'Não foi possível gerar o NPC.'}); }
         this.setState({busy:false}); },`;
 
-const tail = TAIL.replace(mGen[0], GEN_NPC_NOVO);
+let tail = TAIL.replace(mGen[0], GEN_NPC_NOVO);
 if (/window\.claude/.test(tail)) {
   throw new Error('sobrou window.claude no corpo portado');
 }
+
+// ---- mídia por caminho relativo -> absoluto -------------------------------
+//
+// O designer escreve 'fundos/bar.jpg' porque no artifact a página era um
+// arquivo solto e o caminho resolvia ao lado dele. No app a mesma string
+// resolve contra a ROTA: em /jogar/<id> viraria /jogar/fundos/bar.jpg. Como os
+// arquivos ainda não chegaram, o sintoma seria um 404 silencioso e um fundo
+// preto — exatamente igual ao que se vê hoje, e portanto invisível até alguém
+// entregar as imagens e elas continuarem não aparecendo.
+const RE_MIDIA = /(['"])((?:fundos|musica|sons)\/[^'"]+|fundo-eras\.png)\1/g;
+const achouMidia = new Set();
+tail = tail.replace(RE_MIDIA, (todo, q, caminho) => {
+  achouMidia.add(caminho);
+  return `${q}/${caminho}${q}`;
+});
+if (!achouMidia.size) {
+  throw new Error('nenhum caminho de mídia encontrado — o designer mudou a forma de referenciar os fundos?');
+}
+if (RE_MIDIA.test(tail)) throw new Error('sobrou caminho de mídia relativo no corpo portado');
 
 const out =
   CABECALHO +
@@ -432,5 +451,6 @@ console.log('prelúdio    : linhas 1-' + (L_CLASSE - 1), `(${PRELUDE_ORIG.split(
 console.log('HEAD        : linhas ' + L_CLASSE + '-' + (L_PROMPT - 1));
 console.log('systemPrompt: linhas ' + L_PROMPT + '-' + (L_NARRATE - 1) + ' -> lib/server/prompt.ts');
 console.log('TAIL        : linhas ' + L_INGEST + '-' + linhas.length);
+console.log('midia       :', achouMidia.size, 'caminhos absolutizados:', [...achouMidia].sort().join(', '));
 console.log('logic.tsx   :', out.length, 'bytes');
 console.log('prompt.ts   :', prompt.length, 'bytes');

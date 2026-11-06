@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import OracleLogic from '@/lib/oracle/logic';
 import { RemoteStore, type SaveShape } from '@/lib/oracle/store';
+import TrilhaAmbiente from '@/components/TrilhaAmbiente';
 
 /**
  * Liga o oraculo portado a' persistencia da conta.
@@ -27,11 +28,14 @@ export default function PlayClient({
   );
 
   return (
-    <OracleLogic
-      store={store}
-      initial={initial}
-      tamanhoNarracao={(prefs.tamanhoNarracao as any) || 'medio'}
-      modeloIA={(prefs.modeloIA as any) || 'haiku'}
-    />
+    <>
+      <OracleLogic
+        store={store}
+        initial={initial}
+        tamanhoNarracao={(prefs.tamanhoNarracao as any) || 'medio'}
+        modeloIA={(prefs.modeloIA as any) || 'haiku'}
+      />
+      <TrilhaAmbiente />
+    </>
   );
 }

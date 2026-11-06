@@ -240,7 +240,7 @@ export default function OracleView({ v }: { v: any }) {
                         {m.inactive ? (<>
                           <button onClick={m.go} style={{background: "none", color: "var(--sv-dim,#929396)", border: "none", padding: "10px 16px", fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", cursor: "pointer"}}>{m.label}</button></>) : null}{"\n                "}</Fragment>))}{"\n              "}</div>{"\n              "}
                     {v.modeFala ? (<>{"\n                "}
-                      <select value={v.talkTo} onChange={v.onTalkTo} style={{background: "var(--sv-panel2,#17181b)", border: "1px solid var(--sv-line2,#353639)", padding: "8px 10px", fontSize: "13px", minWidth: "220px", maxWidth: "100%"}}>{"\n                  "}
+                      <select value={v.talkTo} onChange={v.onTalkTo} style={{background: "var(--sv-panel2,#17181b)", border: "1px solid var(--sv-line2,#353639)", padding: "8px 10px", fontSize: "13px", minWidth: "220px", maxWidth: "100%"}} className="svf-box">{"\n                  "}
                         <option value={""}>{"Falar em voz alta (ambiente)"}</option>{"\n                  "}
                         {(v.talkOptions ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                           <option value={o.id}>{o.nome}</option></Fragment>))}{"\n                "}</select>{"\n              "}</>) : null}{"\n            "}</div>{"\n            "}
@@ -256,7 +256,7 @@ export default function OracleView({ v }: { v: any }) {
               <div style={{flex: "1 1 300px", maxWidth: "100%", display: "flex", flexDirection: "column", gap: "16px", minWidth: "0"}}>{"\n          "}
                 <div style={{background: "var(--sv-panel,#191a1d)", border: "1px solid var(--sv-line,#303134)", padding: "18px", display: "flex", flexDirection: "column", gap: "12px"}} className={"sv-side-panel"}>{"\n            "}
                   <div style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--sv-dim,#929396)"}}>{"Cena atual"}</div>{"\n            "}
-                  <select value={v.cena} onChange={v.onCena} style={{background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "9px 10px", fontSize: "14px"}}>{"\n              "}
+                  <select value={v.cena} onChange={v.onCena} style={{background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "9px 10px", fontSize: "14px"}} className="svf-box">{"\n              "}
                     <option value={""}>{"Sem região definida"}</option>{"\n              "}
                     {(v.regionOptions ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                       <option value={o.nome}>{o.nome}</option></Fragment>))}{"\n            "}</select>{"\n            "}
@@ -303,7 +303,7 @@ export default function OracleView({ v }: { v: any }) {
                 <button onClick={v.newCase} style={{background: "none", border: "1.5px solid var(--sv-accent,#797a7d)", color: "var(--sv-accent-soft,#cacbce)", fontSize: "12px", letterSpacing: "0.16em", textTransform: "uppercase", cursor: "pointer", padding: "6px 10px", transform: "rotate(-1deg)"}} className={"sv-stamp" + " svh-15"}>{"Fechar caso e começar outro"}</button>{"\n        "}</div>{"\n        "}
               <div style={{background: "var(--sv-paper,#dedede)", color: "var(--sv-bg,#131212)", padding: "clamp(20px,4vw,36px)", display: "flex", flexDirection: "column", gap: "12px", transform: "rotate(-0.4deg)"}} className={"sv-doc"}>{"\n          "}
                 <div style={{fontSize: "12px", letterSpacing: "0.24em", textTransform: "uppercase"}}>{v.geradorTitulo}</div>{"\n          "}
-                <input value={v.caso.titulo} onChange={v.c_titulo} placeholder={"Título do caso"} style={{background: "transparent", border: "none", borderBottom: "2px solid var(--sv-bg,#131212)", padding: "8px 0", fontFamily: "var(--sv-display,'Bodoni Moda',serif)", fontWeight: "900", fontSize: "28px", outline: "none", color: "var(--sv-bg,#131212)"}} />{"\n          "}
+                <input value={v.caso.titulo} onChange={v.c_titulo} placeholder={"Título do caso"} style={{background: "transparent", border: "none", borderBottom: "2px solid var(--sv-bg,#131212)", padding: "8px 0", fontFamily: "var(--sv-display,'Bodoni Moda',serif)", fontWeight: "900", fontSize: "28px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" />{"\n          "}
                 <textarea value={v.caso.premissa} onChange={v.c_premissa} rows={8} placeholder={"A premissa: quem contrata, o que aconteceu, com quem."} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "14px", minHeight: "clamp(180px,30vh,300px)", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", lineHeight: "1.7", outline: "none", resize: "vertical", color: "var(--sv-bg,#131212)"}} />{"\n          "}
                 {v.hasSegredo ? (<>{"\n            "}
                   <div style={{display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", fontSize: "12px", letterSpacing: "0.15em", textTransform: "uppercase"}}>{"\n              "}
@@ -339,15 +339,15 @@ export default function OracleView({ v }: { v: any }) {
                     <div style={{fontSize: "12px", letterSpacing: "0.15em", textTransform: "uppercase"}}>{v.muralInfo}</div>{"\n            "}</div>{"\n            "}
                   <div style={{fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", lineHeight: "1.55"}}>{"Cada pista anotada é um Cartão. Ligue dois com um Fio e diga a relação. Verificar custa 1 Impulso e o narrador nunca mente: firme ou cortado. Cada Fio firme vale uma Vantagem; três em triângulo trazem a Revelação."}</div>{"\n            "}
                   <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,200px),1fr))", gap: "8px", alignItems: "end"}}>{"\n              "}
-                    <select value={v.fioA} onChange={v.onFioA} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px", fontSize: "13px", color: "var(--sv-bg,#131212)"}}>
+                    <select value={v.fioA} onChange={v.onFioA} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px", fontSize: "13px", color: "var(--sv-bg,#131212)"}} className="svf-box">
                       <option value={""}>{"Cartão A"}</option>
                       {(v.pistaOpts ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                         <option value={o.id}>{o.label}</option></Fragment>))}</select>{"\n              "}
-                    <select value={v.fioB} onChange={v.onFioB} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px", fontSize: "13px", color: "var(--sv-bg,#131212)"}}>
+                    <select value={v.fioB} onChange={v.onFioB} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px", fontSize: "13px", color: "var(--sv-bg,#131212)"}} className="svf-box">
                       <option value={""}>{"Cartão B"}</option>
                       {(v.pistaOpts ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                         <option value={o.id}>{o.label}</option></Fragment>))}</select>{"\n              "}
-                    <input value={v.fioRel} onChange={v.onFioRel} placeholder={"A relação: o contador pagou o arquivista"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", outline: "none", color: "var(--sv-bg,#131212)"}} />{"\n              "}
+                    <input value={v.fioRel} onChange={v.onFioRel} placeholder={"A relação: o contador pagou o arquivista"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" />{"\n              "}
                     <button onClick={v.addFio} style={{background: "var(--sv-bg,#131212)", color: "var(--sv-ink,#e0e0e0)", border: "none", padding: "10px 14px", fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", cursor: "pointer"}}>{"Ligar com um Fio"}</button>{"\n            "}</div>{"\n            "}
                   {(v.fiosView ?? []).map((f: any, f__i: number) => (<Fragment key={f__i}>{"\n              "}
                     <div style={{display: "flex", gap: "12px", alignItems: "flex-start", flexWrap: "wrap", padding: "10px 0", borderTop: "1px solid var(--sv-bg,#131212)"}}>{"\n                "}
@@ -375,12 +375,12 @@ export default function OracleView({ v }: { v: any }) {
                       <div style={{flex: "1", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", lineHeight: "1.5"}}>{p.t}</div>{"\n                "}
                       <button onClick={p.del} style={{background: "none", border: "none", color: "var(--sv-dim2,#727376)", cursor: "pointer", padding: "4px 8px", fontSize: "18px", lineHeight: "1", minWidth: "32px", minHeight: "32px"}} aria-label={"Remover"}>{"×"}</button>{"\n              "}</div>{"\n            "}</Fragment>))}{"\n            "}
                   <div style={{display: "flex", gap: "0", marginTop: "auto", height: "42px"}}>{"\n              "}
-                    <input value={v.pistaDraft} onChange={v.onPistaDraft} placeholder={"Anotar pista"} style={{flex: "1", minWidth: "0", height: "42px", boxSizing: "border-box", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "0 12px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", outline: "none"}} />{"\n              "}
+                    <input value={v.pistaDraft} onChange={v.onPistaDraft} placeholder={"Anotar pista"} style={{flex: "1", minWidth: "0", height: "42px", boxSizing: "border-box", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "0 12px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", outline: "none"}} className="svf-box" />{"\n              "}
                     <button onClick={v.addPista} style={{flex: "none", width: "42px", height: "42px", boxSizing: "border-box", background: "var(--sv-ink,#e0e0e0)", color: "var(--sv-bg,#131212)", border: "none", padding: "0", fontSize: "16px", lineHeight: "1", cursor: "pointer"}}>{"+"}</button>{"\n            "}</div>{"\n          "}</div>{"\n          "}
                 <div style={{display: "flex", flexDirection: "column", gap: "12px"}}>{"\n            "}
                   <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", height: "40px", gap: "8px", flexWrap: "nowrap", fontSize: "12px", letterSpacing: "0.24em", textTransform: "uppercase", color: "var(--sv-dim,#929396)", borderBottom: "1px solid var(--sv-line,#303134)", paddingBottom: "8px", boxSizing: "border-box"}}>{"\n              "}
                     <span style={{whiteSpace: "nowrap", flex: "none"}}>{"Provas · Peso "}{v.pesoTotal}</span>{"\n              "}
-                    <select value={v.caso.nec} onChange={v.c_nec} style={{minWidth: "0", maxWidth: "62%", height: "28px", boxSizing: "border-box", textOverflow: "ellipsis", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "0 6px", fontSize: "12px", letterSpacing: "0.05em", textTransform: "none"}}>{"\n                "}
+                    <select value={v.caso.nec} onChange={v.c_nec} style={{minWidth: "0", maxWidth: "62%", height: "28px", boxSizing: "border-box", textOverflow: "ellipsis", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "0 6px", fontSize: "12px", letterSpacing: "0.05em", textTransform: "none"}} className="svf-box">{"\n                "}
                       <option value={"4"}>{"Necessário 4 · ninguém importante"}</option>{"\n                "}
                       <option value={"6"}>{"Necessário 6 · alguém com advogado"}</option>{"\n                "}
                       <option value={"9"}>{"Necessário 9 · protegido por facção"}</option>{"\n                "}
@@ -395,8 +395,8 @@ export default function OracleView({ v }: { v: any }) {
                       <div style={{fontSize: "12px", letterSpacing: "0.15em", whiteSpace: "nowrap"}}>{"PESO "}{p.peso}</div>{"\n                "}
                       <button onClick={p.del} style={{background: "none", border: "none", color: "var(--sv-dim2,#727376)", cursor: "pointer", padding: "4px 8px", fontSize: "18px", lineHeight: "1", minWidth: "32px", minHeight: "32px"}} aria-label={"Remover"}>{"×"}</button>{"\n              "}</div>{"\n            "}</Fragment>))}{"\n            "}
                   <div style={{display: "flex", gap: "0", marginTop: "auto", height: "42px"}}>{"\n              "}
-                    <input value={v.provaDraft} onChange={v.onProvaDraft} placeholder={"Registrar prova"} style={{flex: "1", minWidth: "0", height: "42px", boxSizing: "border-box", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "0 12px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", outline: "none"}} />{"\n              "}
-                    <select value={v.provaPeso} onChange={v.onProvaPeso} style={{flex: "none", height: "42px", boxSizing: "border-box", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", borderLeft: "none", padding: "0 8px", fontSize: "13px"}}>
+                    <input value={v.provaDraft} onChange={v.onProvaDraft} placeholder={"Registrar prova"} style={{flex: "1", minWidth: "0", height: "42px", boxSizing: "border-box", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "0 12px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", outline: "none"}} className="svf-box" />{"\n              "}
+                    <select value={v.provaPeso} onChange={v.onProvaPeso} style={{flex: "none", height: "42px", boxSizing: "border-box", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", borderLeft: "none", padding: "0 8px", fontSize: "13px"}} className="svf-box">
                       <option value={"1"}>{"1"}</option>
                       <option value={"2"}>{"2"}</option>
                       <option value={"3"}>{"3"}</option></select>{"\n              "}
@@ -423,11 +423,11 @@ export default function OracleView({ v }: { v: any }) {
                 {v.hasProntos ? (<>{"\n          "}
                   <div style={{display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end"}}>{"\n            "}
                     <div style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Carregar pronto"}</div>{"\n            "}
-                    <select value={""} onChange={v.loadPronto} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px 10px", fontSize: "14px", color: "var(--sv-bg,#131212)"}}>{"\n              "}
+                    <select value={""} onChange={v.loadPronto} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px 10px", fontSize: "14px", color: "var(--sv-bg,#131212)"}} className="svf-box">{"\n              "}
                       <option value={""}>{"Escolher…"}</option>{"\n              "}
                       {(v.prontos ?? []).map((p: any, p__i: number) => (<Fragment key={p__i}>
                         <option value={p.i}>{p.nome}{" · "}{p.arq}</option></Fragment>))}{"\n            "}</select>{"\n          "}</div>{"\n          "}</>) : null}{"\n        "}</div>{"\n\n        "}
-              <details open={true} className={"sv-step"}>
+              <details open={false} className={"sv-step"}>
                 <summary>
                   <span className={"sv-step-t"}>{"Quem é você"}</span>
                   <span className={"sv-step-h"}>{"nome, arquétipo, origem, conceito"}</span></summary>
@@ -435,22 +435,22 @@ export default function OracleView({ v }: { v: any }) {
                   <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,230px),1fr))", gap: "16px"}}>{"\n          "}
                     <label style={{display: "flex", flexDirection: "column", gap: "4px"}}>
                       <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Nome"}</span>
-                      <input value={v.char.nome} onChange={v.f_nome} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "18px", outline: "none", color: "var(--sv-bg,#131212)"}} /></label>{"\n          "}
+                      <input value={v.char.nome} onChange={v.f_nome} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "18px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" /></label>{"\n          "}
                     <label style={{display: "flex", flexDirection: "column", gap: "4px"}}>
                       <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Arquétipo"}</span>{"\n            "}
-                      <select value={v.char.arq} onChange={v.f_arq} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}}>
+                      <select value={v.char.arq} onChange={v.f_arq} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line">
                         <option value={""}>{"—"}</option>
                         {(v.arqOptions ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                           <option value={o.n}>{o.n}</option></Fragment>))}</select></label>{"\n          "}
                     <label style={{display: "flex", flexDirection: "column", gap: "4px"}}>
                       <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{v.oriLabel}</span>{"\n            "}
-                      <select value={v.char.ori} onChange={v.f_ori} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}}>
+                      <select value={v.char.ori} onChange={v.f_ori} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line">
                         <option value={""}>{"—"}</option>
                         {(v.oriOptions ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                           <option value={o}>{o}</option></Fragment>))}</select></label>{"\n          "}
                     <label style={{display: "flex", flexDirection: "column", gap: "4px"}}>
                       <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{v.motLabel}</span>{"\n            "}
-                      <select value={v.motValue} onChange={v.f_mot} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}}>
+                      <select value={v.motValue} onChange={v.f_mot} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line">
                         <option value={""}>{"—"}</option>
                         {(v.motOptions ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                           <option value={o}>{o}</option></Fragment>))}</select></label>{"\n        "}</div>{"\n        "}
@@ -468,7 +468,7 @@ export default function OracleView({ v }: { v: any }) {
                   <label style={{display: "flex", flexDirection: "column", gap: "8px"}}>
                     <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Conceito"}</span>
                     <textarea placeholder={"Quem você é para a cidade, o que fez de errado, por que não foi embora"} value={v.char.conceito} onChange={v.f_conceito} rows={2} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "10px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none", resize: "vertical", color: "var(--sv-bg,#131212)"}} /></label>{"\n\n        "}</div></details>{"\n"}
-              <details open={true} className={"sv-step"}>
+              <details open={false} className={"sv-step"}>
                 <summary>
                   <span className={"sv-step-t"}>{"Habilidades"}</span>
                   <span className={"sv-step-h"}>{"investigativas e especialidades"}</span></summary>
@@ -529,7 +529,7 @@ export default function OracleView({ v }: { v: any }) {
                       <textarea value={v.char.fontes} onChange={v.f_fontes} rows={3} placeholder={"Uma pessoa, um hábito, um traço (ou um lugar)."} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "10px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none", resize: "vertical", color: "var(--sv-bg,#131212)"}} /></label>{"\n          "}
                     <div style={{display: "flex", flexDirection: "column", gap: "8px"}}>{"\n            "}
                       <span style={{fontSize: "12px", letterSpacing: "0.3em", textTransform: "uppercase"}}>{"Vício · a Garrafa"}</span>{"\n            "}
-                      <input value={v.char.vicio} onChange={v.f_vicio} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} />{"\n            "}
+                      <input value={v.char.vicio} onChange={v.f_vicio} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" />{"\n            "}
                       <div style={{display: "flex", gap: "8px", alignItems: "center", fontSize: "12px", letterSpacing: "0.15em", textTransform: "uppercase"}}>{"\n              "}
                         <span>{"Traços"}</span>{"\n              "}
                         {(v.vicioBoxes ?? []).map((b: any, b__i: number) => (<Fragment key={b__i}>{"\n                "}
@@ -551,7 +551,7 @@ export default function OracleView({ v }: { v: any }) {
                     <div style={{display: "flex", gap: "12px 18px", alignItems: "flex-end", flexWrap: "wrap", borderTop: "1px solid var(--sv-bg,#131212)", paddingTop: "14px"}}>{"\n            "}
                       <label style={{flex: "1 1 260px", display: "flex", flexDirection: "column", gap: "4px"}}>
                         <span style={{fontSize: "12px", letterSpacing: "0.3em", textTransform: "uppercase"}}>{"A Medalha · qual, e onde a ganhou"}</span>
-                        <input value={v.char.medalha} onChange={v.f_medalha} placeholder={"Estrela de Bronze, Guadalcanal"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} /></label>{"\n            "}
+                        <input value={v.char.medalha} onChange={v.f_medalha} placeholder={"Estrela de Bronze, Guadalcanal"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" /></label>{"\n            "}
                       <button onClick={v.useMedalha} style={{background: "var(--sv-bg,#131212)", color: "var(--sv-ink,#e0e0e0)", border: "none", padding: "10px 16px", fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", cursor: "pointer"}} className={"svb"}>{"Mostrar a medalha"}</button>{"\n            "}
                       <div style={{flex: "1 1 100%", fontSize: "12px", letterSpacing: "0.05em", color: "var(--sv-paperdim,#5d5e61)"}}>{"Usos neste caso: "}{v.medalhaUsos}{" · o primeiro dá +2 num teste social diante de autoridade · Sangue-Frio contra 4, falha perde 2 · três usos: um traço de Vício"}</div>{"\n          "}</div>{"\n        "}</>) : null}{"\n\n        "}</div></details>{"\n"}
               <details className={"sv-step"}>
@@ -566,13 +566,13 @@ export default function OracleView({ v }: { v: any }) {
                     <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,200px),1fr))", gap: "16px"}}>{"\n            "}
                       <label style={{display: "flex", flexDirection: "column", gap: "4px"}}>
                         <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Ano de nascimento"}</span>
-                        <input value={v.char.anoNasc} onChange={v.f_anoNasc} placeholder={"1893"} inputMode={"numeric"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} /></label>{"\n            "}
+                        <input value={v.char.anoNasc} onChange={v.f_anoNasc} placeholder={"1893"} inputMode={"numeric"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" /></label>{"\n            "}
                       <label style={{display: "flex", flexDirection: "column", gap: "4px"}}>
                         <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Laço de Herança · era ou ano"}</span>
-                        <input value={v.char.lacoEra} onChange={v.f_lacoEra} placeholder={"1935"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} /></label>{"\n            "}
+                        <input value={v.char.lacoEra} onChange={v.f_lacoEra} placeholder={"1935"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" /></label>{"\n            "}
                       <label style={{display: "flex", flexDirection: "column", gap: "4px"}}>
                         <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Herdado de"}</span>
-                        <input value={v.char.lacoDe} onChange={v.f_lacoDe} placeholder={"Eddie Lum"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} /></label>{"\n          "}</div>{"\n          "}
+                        <input value={v.char.lacoDe} onChange={v.f_lacoDe} placeholder={"Eddie Lum"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-bg,#131212)", padding: "6px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "16px", outline: "none", color: "var(--sv-bg,#131212)"}} className="svf-line" /></label>{"\n          "}</div>{"\n          "}
                     <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,280px),1fr))", gap: "16px"}}>{"\n            "}
                       <label style={{display: "flex", flexDirection: "column", gap: "8px"}}>
                         <span style={{fontSize: "12px", letterSpacing: "0.3em", textTransform: "uppercase"}}>{"Heranças recebidas"}</span>
@@ -592,7 +592,7 @@ export default function OracleView({ v }: { v: any }) {
                     {v.hasSalto ? (<>{"\n            "}
                       <div style={{display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", borderTop: "1px solid var(--sv-bg,#131212)", paddingTop: "14px"}}>{"\n              "}
                         <span style={{fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase"}}>{"Levar para"}</span>{"\n              "}
-                        <select value={v.saltoEra} onChange={v.onSaltoEra} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px 10px", fontSize: "14px", color: "var(--sv-bg,#131212)"}}>
+                        <select value={v.saltoEra} onChange={v.onSaltoEra} style={{background: "transparent", border: "1px solid var(--sv-bg,#131212)", padding: "8px 10px", fontSize: "14px", color: "var(--sv-bg,#131212)"}} className="svf-box">
                           {(v.saltoOptions ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                             <option value={o.e}>{o.label}</option></Fragment>))}</select>{"\n              "}
                         <button onClick={v.jumpSame} style={{background: "var(--sv-bg,#131212)", color: "var(--sv-ink,#e0e0e0)", border: "none", padding: "10px 14px", fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", cursor: "pointer"}} className={"svb"}>{"O mesmo, envelhecido"}</button>{"\n              "}
@@ -737,17 +737,17 @@ export default function OracleView({ v }: { v: any }) {
                 <div style={{fontFamily: "var(--sv-display,'Bodoni Moda',serif)", fontWeight: "900", fontSize: "40px", textTransform: "uppercase", lineHeight: "1", color: "var(--sv-title,inherit)"}}>{"Elenco"}</div>{"\n          "}
                 <div style={{fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "14px", color: "var(--sv-dim,#929396)"}}>{v.elencoCount}{" Personagens do Diretor do livro · virtude, pecado, quer, teme"}</div>{"\n        "}</div>{"\n        "}
               <div style={{display: "flex", gap: "12px", flexWrap: "wrap"}}>{"\n          "}
-                <input value={v.npcQ} onChange={v.onNpcQ} placeholder={"Buscar por nome ou papel"} style={{flex: "1", minWidth: "200px", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "10px 14px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} />{"\n          "}
-                <select value={v.npcReg} onChange={v.onNpcReg} style={{background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "10px", fontSize: "14px"}}>
+                <input value={v.npcQ} onChange={v.onNpcQ} placeholder={"Buscar por nome ou papel"} style={{flex: "1", minWidth: "200px", background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "10px 14px", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} className="svf-box" />{"\n          "}
+                <select value={v.npcReg} onChange={v.onNpcReg} style={{background: "var(--sv-bg,#131212)", border: "1px solid var(--sv-line2,#353639)", padding: "10px", fontSize: "14px"}} className="svf-box">
                   <option value={""}>{"Todas as regiões"}</option>
                   <option value={"__cena"}>{"Só os em cena"}</option>
                   <option value={"__meus"}>{"Criados por mim"}</option>
                   {(v.regionOptions ?? []).map((o: any, o__i: number) => (<Fragment key={o__i}>
                     <option value={o.nome}>{o.nome}</option></Fragment>))}</select>{"\n        "}</div>{"\n        "}
               <div style={{background: "var(--sv-panel,#191a1d)", border: "1px solid var(--sv-line,#303134)", padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,180px),1fr))", gap: "12px", alignItems: "end"}}>{"\n          "}
-                <input value={v.npcForm.nome} onChange={v.n_nome} placeholder={"Novo NPC · nome"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-line2,#353639)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} />{"\n          "}
-                <input value={v.npcForm.papel} onChange={v.n_papel} placeholder={"Papel"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-line2,#353639)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} />{"\n          "}
-                <input value={v.npcForm.desc} onChange={v.n_desc} placeholder={"Virtude, pecado, o que quer"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-line2,#353639)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} />{"\n          "}
+                <input value={v.npcForm.nome} onChange={v.n_nome} placeholder={"Novo NPC · nome"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-line2,#353639)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} className="svf-line" />{"\n          "}
+                <input value={v.npcForm.papel} onChange={v.n_papel} placeholder={"Papel"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-line2,#353639)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} className="svf-line" />{"\n          "}
+                <input value={v.npcForm.desc} onChange={v.n_desc} placeholder={"Virtude, pecado, o que quer"} style={{background: "transparent", border: "none", borderBottom: "1px solid var(--sv-line2,#353639)", padding: "8px 0", fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "15px", outline: "none"}} className="svf-line" />{"\n          "}
                 <div style={{display: "flex", gap: "8px"}}>{"\n            "}
                   <button onClick={v.addNpc} style={{flex: "1", background: "var(--sv-ink,#e0e0e0)", color: "var(--sv-bg,#131212)", border: "none", padding: "10px 14px", fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", cursor: "pointer"}} className={"svb"}>{"Adicionar"}</button>{"\n            "}
                   <button onClick={v.genNpc} style={{flex: "1", background: "none", border: "1px solid var(--sv-ink,#e0e0e0)", color: "var(--sv-ink,#e0e0e0)", padding: "10px 14px", fontSize: "12px", letterSpacing: "0.2em", textTransform: "uppercase", cursor: "pointer"}} className={"svb"}>{"Gerar"}</button>{"\n          "}</div>{"\n        "}</div>{"\n        "}

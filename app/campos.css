@@ -1,0 +1,51 @@
+/* Padronização dos campos de uma linha — a melhoria pedida.
+ *
+ * O PROBLEMA, medido no app antes desta folha: selects e inputs de texto que
+ * dividem a mesma linha não tinham a mesma altura nem o mesmo recuo. Na aba
+ * Caso o campo de pista media 42px e o select ao lado 44px; na Crônica o
+ * select de cena media 46px; no Elenco a busca tinha recuo 14px e o select
+ * 10px; na Ficha os campos sublinhados mediam 39,4px e os selects da mesma
+ * grade 44px. Cada um desses números vem de um style inline diferente,
+ * escrito campo a campo.
+ *
+ * O VALOR CANÔNICO não foi inventado: é o que o próprio designer usa na classe
+ * .svr-sel do painel de dados — `height:44px; padding:0 12px`. 44px também é o
+ * mínimo de alvo de toque que ele já aplicava aos selects
+ * (`[role=tab],select{min-height:44px}` em oracle.css); aqui esse mesmo piso
+ * passa a valer para os campos de texto, em vez de só para os selects.
+ *
+ * DUAS FAMÍLIAS, porque o desenho tem duas de verdade:
+ *   - caixa     (border nos quatro lados): altura e recuo fixos, iguais para
+ *                select e input — é aqui que a diferença aparecia lado a lado;
+ *   - sublinhado (só border-bottom, fundo transparente): altura mínima igual,
+ *                recuo horizontal zero nos dois, como o desenho pede. A altura
+ *                é mínima, não fixa, para não espremer o título do caso, que é
+ *                um campo de 28px.
+ *
+ * As classes vêm do transpilador (tools/transpile-template.mjs), que lê a
+ * família do próprio style inline do designer. O !important é necessário:
+ * é exatamente esse style inline que está sendo padronizado.
+ */
+
+select.svf-box,
+input.svf-box {
+  height: 44px !important;
+  box-sizing: border-box !important;
+  padding: 0 12px !important;
+}
+
+select.svf-line,
+input.svf-line {
+  min-height: 44px !important;
+  box-sizing: border-box !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* O select do painel de dados já nascia no valor canônico; entra na regra para
+   que uma mudança futura do valor o leve junto, em vez de deixá-lo para trás. */
+.svr-sel {
+  height: 44px !important;
+  box-sizing: border-box !important;
+  padding: 0 12px !important;
+}

@@ -23,12 +23,12 @@ const pmMod = projReq('pixelmatch');
 const pixelmatch = typeof pmMod === 'function' ? pmMod : pmMod.default;
 const { PNG } = projReq('pngjs');
 
-const ORIGINAL = process.env.SV_ORIGINAL || 'source/original.html';
+const ORIGINAL = process.env.SV_ORIGINAL || 'source/original-v2.html';
 const PORT = Number(process.env.SV_PORT || 3100);
 const BASE = `http://127.0.0.1:${PORT}`;
 const OUT = 'tests/pixel/__shots__';
 const DIFF = 'tests/pixel/__diff__';
-const TOLERANCE = 0.001; // 0,1% dos pixels
+const TOLERANCE = Number(process.env.SV_TOL ?? 0.001); // 0,1% dos pixels (SV_TOL=0 investiga)
 
 // ---------------------------------------------------------------- argumentos
 const argv = process.argv.slice(2);
@@ -40,20 +40,34 @@ const onlyViewport = argOf('viewport');
 const onlyEra = argOf('era');
 const onlyTab = argOf('tab');
 
+// 767 e 768 sao o par em volta do ponto onde os grids auto-fit do v2 trocam de
+// numero de colunas. Sao a largura em que uma diferenca de arredondamento no
+// transpilador apareceria, e por isso estao os dois aqui.
 const VIEWPORTS = [
   { name: '390', width: 390, height: 844 },
+  { name: '767', width: 767, height: 1024 },
   { name: '768', width: 768, height: 1024 },
+  { name: '1024', width: 1024, height: 768 },
   { name: '1280', width: 1280, height: 900 },
   { name: '1680', width: 1680, height: 1050 },
 ].filter((v) => !onlyViewport || v.name === onlyViewport);
 
 // Estados: a tela de escolha de era (sem save) e cada aba de cada era.
+//
+// A aba Ficha do v2 nasce com todo o conteudo dentro de cinco <details>
+// FECHADOS. Comparar so' esse estado cobriria cinco cabecalhos e mais nada —
+// a ficha inteira (grades de habilidade, medidores, campos) ficaria fora do
+// gate. Por isso ela tem duas variantes: como abre e com os <details> abertos
+// nos dois lados.
 const CASES = [{ id: 'era-select', save: null }];
 for (const era of ERAS) {
   if (onlyEra && era !== onlyEra) continue;
   for (const tab of TABS) {
     if (onlyTab && tab !== onlyTab) continue;
     CASES.push({ id: `${era}-${tab}`, save: makeSave(era, tab) });
+    if (tab === 'ficha') {
+      CASES.push({ id: `${era}-${tab}-aberto`, save: makeSave(era, tab), abrirDetails: true });
+    }
   }
 }
 
@@ -75,6 +89,8 @@ const initScript = (save) => `
 
   // 3. Animacoes e transicoes desligadas (o cursor piscante e o neon de 1994
   //    sao animados e tornariam a captura instavel), e o chip de conta escondido.
+  //    Repetido depois do load por freezeAnimations(): o artifact original
+  //    reescreve o documento ao se desempacotar e leva junto esta <style>.
   //
   //    O chip ([data-sv-account]) e' o UNICO elemento que o app acrescenta a'
   //    interface do artifact. Como e' position:fixed, nao participa do fluxo:
@@ -148,6 +164,71 @@ async function routeFonts(page) {
   await page.route('https://fonts.googleapis.com/**', (r) => r.abort());
 }
 
+/**
+ * Congela animacoes DEPOIS que a pagina terminou de montar.
+ *
+ * O artifact reescreve o documento ao se desempacotar, e a <style> que o
+ * addInitScript injeta vai embora junto — mediu-se: a granulacao (.sv-grain,
+ * `animation: svgrain .9s steps(5) infinite`, nova no v2) continuava rodando
+ * so' do lado do original, parando num deslocamento diferente a cada captura.
+ * Como e' uma camada de ruido em tela cheia, isso sozinho mexia em 2,4% dos
+ * pixels e variava de rodada para rodada. Reaplicar aqui vale para os dois
+ * lados e torna a captura reproduzivel.
+ */
+const CONGELA =
+  '*,*::before,*::after{animation:none !important;transition:none !important;caret-color:transparent !important}' +
+  '[data-sv-account]{display:none !important}';
+
+/**
+ * Aplica dos DOIS lados a padronizacao de campos de app/campos.css.
+ *
+ * E' a unica mudanca deliberada de aparencia nesta versao (altura e recuo
+ * iguais para select e input de uma linha). Aplicando-a tambem ao artifact
+ * original, o gate continua provando que TODO O RESTO e' identico, em vez de
+ * virar uma lista de excecoes onde qualquer regressao se esconderia.
+ *
+ * A classificacao aqui repete a do transpilador — familia lida do style inline
+ * — e o descritor de controles carrega a classe resultante, entao se os dois
+ * lados classificarem um campo de forma diferente o gate reprova.
+ */
+const CAMPOS_CSS = readFileSync('app/campos.css', 'utf8');
+
+async function padronizarCampos(page) {
+  await page.evaluate(() => {
+    const TEXTO = ['text', 'search', 'tel', 'url', 'email', 'number', 'password'];
+    for (const el of document.querySelectorAll('select,input')) {
+      if (el.tagName === 'INPUT' && !TEXTO.includes((el.getAttribute('type') || 'text').toLowerCase())) continue;
+      if (el.classList.contains('svf-box') || el.classList.contains('svf-line')) continue;
+      // Pela borda COMPUTADA, nao pelo texto do style: o CSSOM reserializa
+      // `border:1px solid X;border-left:none` como longhands, e procurar a
+      // palavra "border:" deixava esse campo (o seletor de Peso da prova) sem
+      // familia so' de um lado — o input ao lado dele ficava 8px mais estreito
+      // no app do que no original.
+      const cs = getComputedStyle(el);
+      const topo = parseFloat(cs.borderTopWidth) || 0;
+      const baixo = parseFloat(cs.borderBottomWidth) || 0;
+      if (topo > 0) el.classList.add('svf-box');
+      else if (baixo > 0) el.classList.add('svf-line');
+    }
+  });
+  await page.addStyleTag({ content: CAMPOS_CSS });
+}
+
+async function freezeAnimations(page) {
+  await page.addStyleTag({ content: CONGELA });
+  // getAnimations() pega tambem as criadas por Web Animations API (a animacao
+  // de dados do v2 usa element.animate(), que CSS nenhum desliga).
+  await page.evaluate(() => {
+    for (const a of document.getAnimations()) {
+      try {
+        a.cancel();
+      } catch {
+        /* ja' terminou */
+      }
+    }
+  });
+}
+
 async function settle(page, side) {
   try {
     await page.waitForFunction(() => document.body && document.body.innerText.trim().length > 120, {
@@ -168,7 +249,8 @@ async function settle(page, side) {
   await page.waitForTimeout(350);
 }
 
-async function shoot(browser, url, save, viewport, side) {
+async function shoot(browser, url, caso, viewport, side) {
+  const save = caso.save;
   const page = await browser.newPage({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: 1, // comparacao em pixels reais
@@ -178,14 +260,36 @@ async function shoot(browser, url, save, viewport, side) {
     await page.addInitScript(initScript(save));
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
     await settle(page, side);
+    if (caso.abrirDetails) {
+      await page.evaluate(() => {
+        for (const d of document.querySelectorAll('details')) d.open = true;
+      });
+      await page.waitForTimeout(150);
+    }
+    await padronizarCampos(page);
+    await freezeAnimations(page);
+    await page.waitForTimeout(120);
 
     // Controles de formulario: comparados pelo DOM, nao por pixel (ver abaixo).
+    //
+    // Controles dentro de <details> fechado ficam de fora: o Chromium devolve
+    // ora a ultima caixa conhecida, ora 0x0, conforme o momento da medicao, e
+    // essa instabilidade reprovava a Ficha sem haver diferenca nenhuma. Nao
+    // custa cobertura: o que esta' fechado nao aparece na captura, e a variante
+    // "-aberto" compara esse conteudo com os <details> abertos.
     const controls = await page.evaluate(() =>
-      [...document.querySelectorAll('select,input,textarea')].map((el) => {
+      [...document.querySelectorAll('select,input,textarea')]
+        .filter((el) => {
+          const d = el.closest('details');
+          return !d || d.open;
+        })
+        .map((el) => {
         const b = el.getBoundingClientRect();
         const s = el;
         return {
           tag: el.tagName,
+          // So' a familia padronizada: e' o que precisa bater entre os lados.
+          familia: [...el.classList].filter((c) => c.startsWith('svf-')).sort().join(' '),
           x: Math.round(b.left + scrollX),
           y: Math.round(b.top + scrollY),
           w: Math.round(b.width),
@@ -343,8 +447,8 @@ try {
         for (let attempt = 1; ; attempt++) {
           try {
             [a, b] = await Promise.all([
-              shoot(browser, origUrl, c.save, vp, 'original'),
-              shoot(browser, BASE + '/', c.save, vp, 'novo'),
+              shoot(browser, origUrl, c, vp, 'original'),
+              shoot(browser, BASE + '/', c, vp, 'novo'),
             ]);
             break;
           } catch (e) {

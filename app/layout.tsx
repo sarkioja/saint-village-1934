@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './oracle.css';
+// Depois de oracle.css de proposito: padroniza campos que o CSS do artifact
+// deixou com alturas e recuos diferentes (ver o comentario no arquivo).
+import './campos.css';
 
 export const metadata: Metadata = {
   title: 'Saint Village XX Century · Oráculo',

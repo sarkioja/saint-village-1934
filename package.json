@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "gen": "node tools/extract-css.mjs && node tools/transpile-template.mjs && node tools/split-data.mjs && node tools/port-logic.mjs",
+    "gen": "node tools/extract-css.mjs && node tools/transpile-template.mjs && node tools/split-data.mjs && node tools/port-logic.mjs && node tools/sync-audio.mjs && node tools/scan-midia.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "verify:pixel": "node tests/pixel/run.mjs",

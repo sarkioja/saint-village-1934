@@ -55,7 +55,7 @@ const caso = {
   nec: 4,
   fios: [
     { a: 'p1', b: 'p2', rel: 'o mesmo médico assinou a liberação da carga', st: 'firme' },
-    { a: 'p2', b: 'p3', rel: 'a carga saiu no horário em que o relógio parou', st: 'aberto' },
+    { a: 'p2', b: 'p3', rel: 'a carga saiu no horário em que o relógio parou', st: 'solto' },
   ],
   medalhaUsos: 0,
   flash: false,
@@ -122,4 +122,6 @@ export function makeSave(era, tab) {
 }
 
 export const ERAS = ['1934', '1946', '1974', '1994', '1999'];
-export const TABS = ['cronica', 'caso', 'ficha', 'dados', 'elenco', 'cidade', 'seculo', 'tutorial'];
+// O v2 do designer tirou a aba Dados: as rolagens passaram para o painel
+// flutuante e para a animacao de dados.
+export const TABS = ['cronica', 'caso', 'ficha', 'elenco', 'cidade', 'seculo', 'tutorial'];

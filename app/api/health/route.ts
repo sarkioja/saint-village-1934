@@ -4,6 +4,7 @@ import { getProvider, LlmConfigError, PROVIDERS } from '@/lib/llm';
 import { getStore, today } from '@/lib/store';
 import { accountsEnabled } from '@/lib/store/availability';
 import { postgresUrlVar } from '@/lib/store/pgurl';
+import MIDIA from '@/lib/server/midia.json';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -81,6 +82,20 @@ export async function GET(req: NextRequest) {
     semContaPorIpPorDia: Number(process.env.DEMO_TURNS_PER_IP || 5),
     charsDoLivroNoPrompt: Number(process.env.BOOK_CONTEXT_CHARS || 11000),
     entradasDeHistorico: Number(process.env.HISTORY_TURNS || 18),
+  };
+
+  // ---- mídia por caminho ----
+  //
+  // Fundos, trilha e efeitos não vêm no artifact: o designer os referencia por
+  // caminho. Sem esta lista, um fundo que não aparece tem duas explicações
+  // indistinguíveis — o arquivo não subiu, ou o caminho está errado — porque as
+  // duas dão 404 e tela preta. lib/server/midia.json é gerado por
+  // tools/scan-midia.mjs conferindo public/ contra source/midia-externa.json.
+  saida.midia = {
+    presentes: MIDIA.presentes.length,
+    faltando: MIDIA.faltando.length,
+    // A lista inteira, porque é a resposta à pergunta "o que falta subir".
+    pendentes: MIDIA.faltando,
   };
 
   // ---- sonda opcional: ?probe=llm ----
