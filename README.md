@@ -196,6 +196,13 @@ Afrouxar a tolerância global mascararia regressões de verdade. Em vez disso:
 fluxo**: não desloca um pixel. O gate o esconde por CSS, então a comparação continua cobrindo a
 página inteira. Se ele deixar de ser `fixed`, a altura da página muda e o gate falha.
 
+Ele aparece **só na tela de escolha de era**, no canto superior direito. Em jogo não existe canto
+livre, e isso foi medido: no canto inferior direito o player da trilha (também `fixed`, com
+`z-index` 70 contra 50) cobria os botões; subindo o chip acima dele, ele passa a cobrir o contador
+de Impulsos no desktop e o botão **Enviar** do compositor a 390px. Tapar um controle é pior que o
+defeito original, e empilhar o chip sobre a prosa da crônica é feio sem resolver. O acesso à conta
+continua a um clique: *Trocar era* volta para a tela onde ele está.
+
 ### A trilha ambiente vai verbatim
 
 O v2 trouxe `sv_audio.js`: uma IIFE que monta o player de trilha direto no DOM, sem React e sem
