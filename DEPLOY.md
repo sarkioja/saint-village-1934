@@ -5,13 +5,12 @@
 > — verificado por `/api/health?probe=llm`, que fez uma chamada real e recebeu 149 palavras
 > íntegras em 1,9 s.
 >
-> **Faltam duas coisas, as duas com você:**
+> **Falta uma coisa, com você:**
 >
 > 1. **Deployment Protection** ainda está ligada, então visitante anônimo não abre a URL. É o
 >    último passo entre o projeto e o público. Veja a seção 4.
-> 2. **Os 19 arquivos de mídia** (6 fundos, 11 faixas, 1 efeito). O app está construído como se
->    existissem; `curl -s <url>/api/health | jq .midia` lista nominalmente o que falta e em que
->    pasta cada um entra. Veja a seção correspondente no README.
+> 2. ~~Os 19 arquivos de mídia~~ — **entregues e no ar.** `curl -s <url>/api/health | jq .midia`
+>    responde `{"presentes":19,"faltando":0}`.
 >
 > **Um defeito encontrado e corrigido na verificação:** a sonda flagrou a narração cortada no meio
 > de uma frase. O diagnóstico deu o número: `finish_reason: "length"`, 1.000 tokens de saída, **769

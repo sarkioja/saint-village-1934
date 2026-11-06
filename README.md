@@ -495,17 +495,15 @@ anônimo **não** entrega a verdade oculta do caso, e uma conta não enxerga a c
 ### Mídia que o artifact não traz
 
 O designer referencia fundos, trilha e efeitos por caminho; **nenhum** desses 19 arquivos vem no
-bundle. O app está construído como se eles existissem — os caminhos estão certos e apontam para
-`public/` —, e `/api/health` lista nominalmente o que falta:
+bundle — eles chegaram depois, à parte. `/api/health` publica o inventário, e
+`tools/scan-midia.mjs` o regenera conferindo `public/` contra as referências extraídas do artifact:
 
 ```bash
-curl -s https://<seu-deploy>/api/health | jq .midia
+curl -s https://<seu-deploy>/api/health | jq .midia   # {"presentes":19,"faltando":0,...}
 ```
 
 Sem essa lista, "o fundo não apareceu" tem duas explicações indistinguíveis, porque arquivo ausente
-e caminho errado dão o mesmo 404. `tools/scan-midia.mjs` regenera o inventário conferindo `public/`
-contra as referências extraídas do artifact; basta soltar os arquivos nas pastas e rodar `npm run
-gen`.
+e caminho errado dão o mesmo 404.
 
 | Pasta | Arquivos | Para quê |
 |---|---|---|
@@ -514,9 +512,27 @@ gen`.
 | `public/musica/` | 11 `.mp3` | a trilha ambiente |
 | `public/sons/` | `papel.mp3` | o som de papel ao trocar de aba |
 
-> Quando eles chegarem, copie-os também para `source/` ao lado de `source/original-v2.html`: o gate
-> compara os dois lados, e o original precisa enxergar os mesmos arquivos para a comparação
-> continuar honesta.
+**Os fundos chegaram como PNG de ~2,8 MB cada**, e o código do designer já os referencia como
+`.jpg` — então é para JPEG que eles vão (qualidade 82, 4:2:0): ~350 KB cada, de 16,8 MB para 2,1 MB
+nos seis, invisível atrás de uma camada de fundo. `fundo-eras.png` é o único que o código pede em
+`.png` e fica como veio. As **faixas vão bit-exatas** (256 kbps, 70 MB no total): o player toca uma
+por vez, e reencodar seria uma decisão de qualidade que ninguém pediu.
+
+**Nomes:** o arquivo do designer casa com o slot por palavra — *…no **bar*** → `bar.jpg`,
+***Briga** no beco* → `briga.jpg`, ***Perseguição** noir* → `perseguicao.jpg`, *Três **silhuetas***
+→ `silhuetas.jpg`, *…da **mesa** de armeiro* → `mesa.jpg`. Dois não casam por palavra e foram
+decididos pelo conteúdo: `cais.jpg` é *Detetive sob a ponte inacabada* (a ponte em construção é o
+cânone de 1934) e `fundo-eras.png` é *SS Excalibur sob céu noturno* — o único com proporção
+diferente, como `fundo-eras.png` é o único `.png` no código.
+
+`briga.jpg` fica no repositório mas **não é usado**: era o fundo da aba Dados, que o v2 dissolveu
+no painel flutuante. O `bgLayers` do designer ainda tem a chave, então o arquivo acompanha.
+
+> **O gate precisa dos mesmos arquivos nos dois lados.** O artifact original os referencia por
+> caminho relativo, resolvido ao lado do HTML; `npm run gen:assets` espelha `public/` em
+> `source/{fundos,musica,sons}` (ignorado pelo git — é cópia byte a byte do que já está
+> versionado). Sem o espelho, o lado original daria 404 e fundo preto, e o gate acusaria uma
+> divergência que não existe no porte.
 
 ## Deploy
 

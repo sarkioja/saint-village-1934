@@ -1,7 +1,6 @@
 {
  "gerado": "tools/scan-midia.mjs",
- "presentes": [],
- "faltando": [
+ "presentes": [
   "fundo-eras.png",
   "fundos/bar.jpg",
   "fundos/briga.jpg",
@@ -21,5 +20,6 @@
   "musica/markmusicstudio-noir-piano-club-572124.mp3",
   "musica/noirtales-film-noir-566510.mp3",
   "sons/papel.mp3"
- ]
+ ],
+ "faltando": []
 }

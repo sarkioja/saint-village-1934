@@ -14,7 +14,7 @@
     "test:smoke": "node tests/smoke.mjs",
     "handover": "node tools/handover.mjs",
     "gen:env": "node tools/gen-env.mjs",
-    "gen:assets": "node tools/sync-assets.mjs && node tools/fetch-gfonts.mjs"
+    "gen:assets": "node tools/sync-assets.mjs && node tools/fetch-gfonts.mjs && node tools/sync-midia-gate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

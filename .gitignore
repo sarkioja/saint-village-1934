@@ -11,3 +11,9 @@ tests/pixel/__shots__/
 
 # bloco de env gerado localmente, nunca versionado
 producao*.env
+
+# espelho da midia para o gate: copia byte a byte do que ja esta em public/
+source/fundos/
+source/musica/
+source/sons/
+source/fundo-eras.png
