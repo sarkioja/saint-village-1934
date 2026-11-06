@@ -127,3 +127,42 @@ describe('buildSystemPrompt', () => {
     expect(stable.length / 4).toBeGreaterThan(1024);
   });
 });
+
+/**
+ * As marcações das automações (lib/oracle/extensions.ts) só servem para alguma
+ * coisa se o narrador souber que elas existem. O vocabulário vive no prompt, e
+ * é aqui que se verifica que ele continua lá depois de cada revisão do designer.
+ */
+describe('marcações das automações no prompt', () => {
+  it('pede [CENA: …] e lista as regiões reais da era', () => {
+    const { full } = buildSystemPrompt(fixture('1934') as any);
+    expect(full).toContain('[CENA:');
+    expect(full).toContain('REGIÕES DESTA ERA');
+    expect(full).toContain('Black Rock e a Ponte');
+  });
+
+  it('pede [FIO-NOVO: …] só onde existe Mural', () => {
+    const comMural = buildSystemPrompt(fixture('1974') as any).full;
+    const semMural = buildSystemPrompt(fixture('1934') as any).full;
+    expect(comMural).toContain('[FIO-NOVO:');
+    expect(semMural).not.toContain('[FIO-NOVO:');
+  });
+
+  it('pede [CASO: …] enquanto o caso está incompleto e para quando não está', () => {
+    const vazio = fixture('1934') as any;
+    vazio.caso = { ...vazio.caso, titulo: '', premissa: '' };
+    expect(buildSystemPrompt(vazio).full).toContain('[CASO:');
+    // Com título e premissa preenchidos não há o que preencher: some do prompt.
+    expect(buildSystemPrompt(fixture('1934') as any).full).not.toContain('[CASO:');
+  });
+
+  it('o resumo rolante entra antes do histórico quando existe', () => {
+    const f = fixture('1934') as any;
+    expect(buildSystemPrompt(f).full).not.toContain('O QUE JÁ ACONTECEU NESTA CRÔNICA');
+    const comResumo = buildSystemPrompt({ ...f, resumo: 'A repórter achou o livro de carga.' });
+    expect(comResumo.full).toContain('O QUE JÁ ACONTECEU NESTA CRÔNICA');
+    expect(comResumo.full).toContain('A repórter achou o livro de carga.');
+    // Vai na metade volátil: muda a cada rodada de resumo, não pode entrar no cache.
+    expect(comResumo.volatile).toContain('O QUE JÁ ACONTECEU NESTA CRÔNICA');
+  });
+});

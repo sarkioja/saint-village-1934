@@ -1,5 +1,16 @@
 # Plano — atualização para a versão do designer
 
+> **Executado.** Fases 1 a 7 entregues; o gate fechou em **246/246 comparações** (6 viewports ×
+> 41 estados), 216 delas em exatamente 0,000%. O resíduo das outras 30 está medido e explicado no
+> README (§ *O resíduo de 0,06%*). O que mudou em relação ao que está escrito abaixo:
+>
+> - a aba **Dados** não existe mais no v2 (o designer a dissolveu no painel flutuante e na animação
+>   de dados), então são 7 abas, e a Ficha ganhou uma variante com os `<details>` abertos;
+> - apareceu um módulo que o plano não previa — a **trilha ambiente** (`sv_audio.js`), que monta um
+>   player no DOM e faz parte do layout comparado;
+> - dois defeitos do porte só apareceram no gate: `<details open="">` virava aberto, e a granulação
+>   animada do original tornava a captura instável.
+
 ## Contexto
 
 O designer entregou uma revisão do oráculo (`source/original-v2.html`, 6,2 MB). A versão no ar

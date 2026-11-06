@@ -11,9 +11,20 @@ Baseado em *Saint Village XX Century*, de Felipe Malorgio · GUMSHOE SRD (CC-BY 
 
 ## O que é este repositório
 
-A interface e o motor de regras vêm de um **Claude Artifact compilado** (um HTML de 6 MB, em
+A interface e o motor de regras vêm de um **Claude Artifact compilado** (um HTML de 6,5 MB, em
+`source/original-v2.html` — a revisão do designer; a primeira versão continua em
 `source/original.html`). Este projeto o transforma em produto — contas, área de membro, múltiplas
-crônicas, narrador em LLM real — **sem alterar um pixel da interface**.
+crônicas, narrador em LLM real — **sem alterar um pixel da interface**, com uma exceção declarada e
+verificada (campos de uma linha, abaixo).
+
+Cada rodada do designer é reprocessada por script, não à mão:
+
+```bash
+node tools/extract-artifact.mjs source/original-v2.html   # desempacota o bundle
+npm run gen:assets                                        # fontes e imagens -> public/
+npm run gen                                               # CSS, JSX, dados, lógica, trilha
+npm run build && npm run verify:pixel                     # e o gate decide se valeu
+```
 
 Três coisas o artifact não tinha e aqui existem:
 
@@ -95,36 +106,73 @@ sobrar qualquer URL remota no CSS.
 
 Compara o HTML original com o app novo, lado a lado:
 
-- **4 viewports** (390, 768, 1280, 1680) × **tela de eras + 8 abas × 5 eras** = 164 comparações.
+- **6 viewports** (390, 767, 768, 1024, 1280, 1680) × **tela de eras + 7 abas × 5 eras, mais a
+  variante da Ficha com os `<details>` abertos** = 246 comparações.
+- 767 e 768 são o par em volta do ponto onde os grids `auto-fit` trocam de número de colunas — é a
+  largura em que um arredondamento diferente apareceria.
 - Mesmo save injetado em `localStorage` nas duas pontas (a mesma chave do artifact, de propósito).
-- `Math.random` com semente fixa, animações e transições desligadas, fontes servidas do disco nas
-  duas pontas (inclusive as 12 que o original buscava no Google).
+- `Math.random` com semente fixa, fontes servidas do disco nas duas pontas (inclusive as 18 que o
+  original buscava no Google), e animações congeladas **depois** do load — o artifact reescreve o
+  documento ao se desempacotar e levava junto a folha que as desliga.
 - Tolerância de **0,1%** dos pixels; acima disso falha e salva original, novo e diff em
   `tests/pixel/__diff__/`.
 
 ```bash
 npm run build && npm run verify:pixel
 npm run verify:pixel -- --viewport 1280 --era 1934 --tab ficha   # um caso só
+SV_TOL=0 npm run verify:pixel -- --viewport 390 --tab cronica    # investigar resíduo
 ```
 
-**Resultado: 164/164 em exatamente 0,000%.** Nenhum pixel de diferença em nenhuma das 4 viewports,
-8 abas e 5 eras.
+**Resultado: 246/246 dentro da tolerância; 216 em exatamente 0,000%.**
 
-| Viewport | Comparações | Falhas |
-|---|---|---|
-| 390 | 41 | 0 |
-| 768 | 41 | 0 |
-| 1280 | 41 | 0 |
-| 1680 | 41 | 0 |
+| Viewport | Comparações | Falhas | Em 0,000% |
+|---|---|---|---|
+| 390 | 41 | 0 | 36 |
+| 767 | 41 | 0 | 36 |
+| 768 | 41 | 0 | 36 |
+| 1024 | 41 | 0 | 36 |
+| 1280 | 41 | 0 | 36 |
+| 1680 | 41 | 0 | 36 |
 
-O artifact de 6 MB às vezes não termina de se desempacotar dentro do tempo; o gate repete o caso
+#### O resíduo de 0,06%, e por que ele fica
+
+As 30 comparações não-zero são todas a aba **Crônica**, e todas no mesmo lugar: a coluna de rótulos
+dos medidores do painel lateral (*Saúde*, *Sangue-Frio*, *Integridade*, *Impulsos*). Medindo pixel a
+pixel, a razão de brilho é constante — 0,706 — e a causa está no DOM:
+
+```
+original:  span.sc-interp   color = rgb(212,212,212)   ← wrapper do runtime de artifacts
+           span             color = rgb(149,150,153)   ← o que o designer escreveu
+novo:      span             color = rgb(149,150,153)
+```
+
+O runtime de artifacts embrulha cada interpolação `{{ }}` num `<span class="sc-interp">` e o pinta
+com a cor de tinta padrão, ignorando o `color` que o designer deu ao rótulo. Onde a cor herdada já
+é a padrão — quase a página inteira — não se nota; nesses rótulos propositalmente apagados, sim.
+
+Reproduzir isso exigiria emitir um wrapper em volta de **toda** interpolação do template só para
+copiar o override de cor de um host que não faz parte do produto. A conta não fecha: seria uma
+mudança estrutural grande, com risco de deslocamento em linha, para replicar um comportamento do
+runtime do artifact que o designer nunca pediu — e que some quando ele mesmo olha o CSS que
+escreveu. Fica registrado aqui, medido, em vez de escondido numa tolerância frouxa.
+
+O artifact de 6,5 MB às vezes não termina de se desempacotar dentro do tempo; o gate repete o caso
 até 3 vezes antes de reprovar, porque isso é lentidão dele, não divergência de layout.
+
+#### Por que a Ficha tem duas variantes
+
+No v2 a aba Ficha nasce com **todo** o conteúdo dentro de cinco `<details>` fechados. Comparar só
+esse estado cobriria cinco cabeçalhos e mais nada — a ficha inteira ficaria fora do gate. Cada era
+tem então `ficha` (como abre) e `ficha-aberto`, com os `<details>` abertos nos dois lados.
+
+Controles dentro de `<details>` fechado ficam fora da comparação de DOM: o Chromium devolve ora a
+última caixa conhecida, ora `0x0`, conforme o momento da medição.
 
 #### Controles de formulário: comparados pelo DOM, não por pixel
 
 Uma divergência real apareceu no caminho e vale registrar, porque explica uma decisão do gate.
 
-No 390px a aba Dados diferia em 0,14%. Medindo: caixa, padding, fonte, número de opções e opção
+Na v1, a aba Dados a 390px diferia em 0,14%. Medindo: caixa, padding, fonte, número de opções e opção
 selecionada **idênticos** nos dois lados, com a mesma posição fracionária (453,796875px) — e
 **969 de 969 pixels divergentes dentro de `<select>`, zero fora**. O texto interno de um `<select>`
 é desenhado pelo caminho do controle *nativo* do Chromium, não por CSS, e dois documentos que
@@ -148,6 +196,44 @@ Afrouxar a tolerância global mascararia regressões de verdade. Em vez disso:
 fluxo**: não desloca um pixel. O gate o esconde por CSS, então a comparação continua cobrindo a
 página inteira. Se ele deixar de ser `fixed`, a altura da página muda e o gate falha.
 
+### A trilha ambiente vai verbatim
+
+O v2 trouxe `sv_audio.js`: uma IIFE que monta o player de trilha direto no DOM, sem React e sem
+template. `tools/sync-audio.mjs` a publica em `public/sv_audio.js` **copiada byte a byte**, mudando
+só os dois caminhos de mídia para absolutos — e falhando se não os encontrar, em vez de publicar um
+player mudo. Ela desenha parte do layout que o gate compara; reescrevê-la em JSX seria trocar uma
+garantia por um risco sem ganho nenhum.
+
+### O desvio deliberado: campos de uma linha
+
+Esta é a **única** diferença intencional de aparência em relação ao artifact, e foi pedida: selects
+e inputs de uma linha não tinham a mesma altura nem o mesmo recuo. Medido antes:
+
+| Onde | Input de texto | Select ao lado |
+|---|---|---|
+| Caso (nova pista) | 42px | 44px |
+| Crônica (região da cena) | — | 46px |
+| Elenco (busca) | recuo 14px | recuo 10px |
+| Ficha (grade sublinhada) | 39,4px | 44px |
+
+Cada número vem de um `style` inline diferente, escrito campo a campo. O valor canônico não foi
+inventado: é o `height:44px; padding:0 12px` que o próprio designer usa em `.svr-sel`, no painel de
+dados — e 44px já era o mínimo de alvo de toque que ele aplicava aos selects.
+
+`tools/transpile-template.mjs` lê a família de cada campo do próprio `style` inline — **caixa**
+(borda nos quatro lados) ou **sublinhado** (só `border-bottom`) — e marca a classe; `app/campos.css`
+iguala altura e recuo dentro de cada família. A altura do sublinhado é mínima, não fixa, para não
+espremer o título do caso, que é um campo de 28px.
+
+Duas verificações, porque uma só não bastaria:
+
+- `tests/campos.test.ts` prova que **todo** campo de uma linha declara a família dele. Um campo novo
+  numa revisão futura, sem classe, voltaria a ter a altura do `style` inline e desalinharia a linha
+  — e falharia aqui, na geração, não no navegador.
+- o gate aplica `app/campos.css` **também ao artifact original**. Assim ele continua provando que
+  todo o resto é idêntico, em vez de virar uma lista de exceções onde qualquer regressão se
+  esconderia.
+
 ---
 
 ## O porte da lógica
@@ -161,18 +247,25 @@ class OracleLogic extends React.Component {   // antes: extends DCLogic
 }
 ```
 
-Um shim de 5 linhas. As 572 linhas do motor de regras — GUMSHOE, parser de marcações, rolagem de
-dados, choques de Sangue-Frio, Fios do Mural, salto de era com herdeiro, navegação do mapa — são
-copiadas **verbatim** em duas fatias (`21-141` e `212-572`). `ingest()`, que lê as marcações da
+Um shim de 5 linhas. As 663 linhas do motor de regras — GUMSHOE, parser de marcações, rolagem de
+dados, choques de Sangue-Frio, Fios do Mural, salto de era com herdeiro, navegação do mapa, e a
+animação 3D de dados que o v2 trouxe — são copiadas **verbatim**. `ingest()`, que lê as marcações da
 resposta e aplica na ficha, não muda uma linha.
+
+As fatias são localizadas **por padrão de texto**, não por número de linha. A primeira versão do
+porter usava linhas fixas e quebrou inteira quando o designer entregou a revisão: o prelúdio passou
+de 20 para 85 linhas. Procurar pelo texto custa o mesmo e sobrevive à próxima rodada.
 
 O que mudou, e só:
 
-1. `systemPrompt()` (linhas 144-195) foi para `lib/server/prompt.ts` — depende do texto do livro.
+1. `systemPrompt()` foi para `lib/server/prompt.ts` — depende do texto do livro.
 2. `narrate()` fala com `/api/narrate` em vez de `window.claude`.
 3. `genNpc()` fala com `/api/npc` (também usava o texto do livro).
 4. `load()`/`save()` passam pelo `Store` (localStorage na demo, API na conta).
 5. `DCLogic` → `React.Component`.
+6. Os caminhos de mídia relativos (`fundos/bar.jpg`, `musica/…`) viram absolutos — no artifact a
+   página era um arquivo solto e o caminho resolvia ao lado dela; aqui resolveria contra a rota, e
+   em `/jogar/<id>` viraria `/jogar/fundos/bar.jpg`.
 
 O porter valida cada substituição e falha se o arquivo de origem mudar de forma.
 
@@ -183,8 +276,8 @@ pixels e pelos testes do parser, não pelo compilador. Todo código novo é tipa
 
 ## Cliente × servidor
 
-`textos` e `geral` — 414 KB de prosa do livro — são usados **só** na montagem do prompt
-(`component.js:162` e `:549`). Vão inteiros para o servidor:
+`textos` e `geral` — 414 KB de prosa do livro — são usados **só** na montagem do prompt. Vão
+inteiros para o servidor:
 
 | | Antes | Depois |
 |---|---|---|
@@ -261,6 +354,35 @@ Mais a cota diária: `DAILY_TURNS_PER_USER` e `DEMO_TURNS_PER_IP`.
 A prosa chega em stream e aparece na tela conforme sai, com um filtro que esconde marcações — até
 uma `[PIST` pela metade no fim do buffer. As marcações só são aplicadas no fim, pelo `ingest()`
 original, sobre o texto completo. O motor de regras não é tocado.
+
+### Automações do fluxo
+
+Quatro coisas que o jogo já pedia ao narrador em prosa e deixava o jogador transcrever à mão.
+Vivem em `lib/oracle/extensions.ts`, **fora** do `ingest()` verbatim:
+
+| Marcação | O que automatiza |
+|---|---|
+| `[CENA: região]` | o prompt manda "escolha uma região coerente e diga onde estamos" — e não dava ao narrador como avisar o app. A região da cena passava a só mudar se o jogador a trocasse no seletor. |
+| `[CASO: título \| premissa]` | o caso nascia com título e premissa em branco, e só o jogador os preenchia. Agora o narrador abre o caso e a aba Caso acompanha. **Nada que o jogador tenha escrito é sobrescrito.** |
+| `[FIO-NOVO: pista \| pista \| relação]` | os Fios do Mural só existiam se o jogador os digitasse. O Fio nasce **solto**; quem o verifica continua sendo ele. Só nas eras com Mural. |
+| resumo rolante | a cada 12 turnos narrativos, `/api/resumo` condensa a crônica num parágrafo que passa a ir no prompt junto com o histórico recente. Sem isso, a janela de 18 entradas rola para fora e o narrador contradiz o que ele mesmo narrou. |
+
+Duas decisões de desenho valem registro:
+
+**Por que não dentro do `ingest()`.** O `switch` dele não tem caso para estas chaves: hoje uma
+marcação desconhecida cai no `default: return m` e sobra como lixo no meio da prosa — era esse o
+sintoma de `[CENA: …]`. Em vez de editar o motor, o que destruiria a garantia de porte verbatim, as
+chaves novas são lidas e **removidas antes**, e o motor recebe só o vocabulário que conhece.
+
+**Por que a gravação vem depois.** `ingest()` lê o estado fora do `setState` e depois regrava
+`char`, `caso` e `naCena` inteiros. Qualquer escrita feita antes dele seria sobrescrita. Então
+`lerExtensoes()` limpa o texto antes e `aplicarExtensoes()` grava depois, dentro de um updater
+funcional — que é também o único jeito de um `[FIO-NOVO]` enxergar a pista que o próprio `ingest()`
+acabou de criar no mesmo turno.
+
+O resumo tem **cota própria**, separada dos turnos do dia: resumir é automático, o jogador não
+pediu, e descontá-lo dos turnos tiraria dele o que ele pediu. O teto existe para um cliente
+adulterado não virar torneira.
 
 ---
 
@@ -339,9 +461,9 @@ a mensagem de configuração.
 
 ```bash
 npm run typecheck        # tsc --noEmit
-npm run test             # Vitest: construtor de prompt (5 eras) + rota de narração
+npm run test             # Vitest: prompt, narração, resumo, automações, campos, store
 npm run build            # build de produção
-npm run verify:pixel     # 164 comparações contra o HTML original
+npm run verify:pixel     # 246 comparações contra o HTML original
 npm run test:smoke       # ponta a ponta contra um servidor no ar (ver abaixo)
 ```
 
@@ -355,6 +477,32 @@ npm run test:smoke
 Ele cobre cadastro, sessão, criação de crônica, lock otimista, progresso derivado, exportação e
 link público — e três controles que um teste de UI não pegaria: rev obsoleto é rejeitado, o link
 anônimo **não** entrega a verdade oculta do caso, e uma conta não enxerga a crônica de outra.
+
+### Mídia que o artifact não traz
+
+O designer referencia fundos, trilha e efeitos por caminho; **nenhum** desses 19 arquivos vem no
+bundle. O app está construído como se eles existissem — os caminhos estão certos e apontam para
+`public/` —, e `/api/health` lista nominalmente o que falta:
+
+```bash
+curl -s https://<seu-deploy>/api/health | jq .midia
+```
+
+Sem essa lista, "o fundo não apareceu" tem duas explicações indistinguíveis, porque arquivo ausente
+e caminho errado dão o mesmo 404. `tools/scan-midia.mjs` regenera o inventário conferindo `public/`
+contra as referências extraídas do artifact; basta soltar os arquivos nas pastas e rodar `npm run
+gen`.
+
+| Pasta | Arquivos | Para quê |
+|---|---|---|
+| `public/fundos/` | 6 `.jpg` | o fundo de cada aba |
+| `public/` | `fundo-eras.png` | o fundo da aba Século |
+| `public/musica/` | 11 `.mp3` | a trilha ambiente |
+| `public/sons/` | `papel.mp3` | o som de papel ao trocar de aba |
+
+> Quando eles chegarem, copie-os também para `source/` ao lado de `source/original-v2.html`: o gate
+> compara os dois lados, e o original precisa enxergar os mesmos arquivos para a comparação
+> continuar honesta.
 
 ## Deploy
 
