@@ -151,16 +151,27 @@ export async function GET(req: NextRequest) {
         };
         if ((saida.sonda as any).pareceTruncado) saida.ok = false;
 
-        // Vazio sem erro e' o caso perigoso: passaria por "ok" e entregaria
-        // narracao em branco ao jogador. Investiga e reprova.
-        if (!limpo) {
+        // Dois modos de falhar calado, e os dois merecem o mesmo diagnóstico:
+        // resposta VAZIA (passaria por "ok" e entregaria narração em branco) e
+        // resposta CORTADA (o jogador vê a cena parar no meio de uma frase). A
+        // pergunta é a mesma — para onde foi o orçamento de tokens — e só o
+        // `finish_reason` com o `usage` respondem: comprimento de verdade, ou
+        // um modelo de raciocínio gastando o orçamento pensando.
+        if (!limpo || (saida.sonda as any).pareceTruncado) {
           saida.ok = false;
           const dbg = (p as any).debugComplete;
           if (typeof dbg === 'function') {
-            saida.sonda = {
-              ...(saida.sonda as object),
-              diagnostico: await dbg.call(p, pedido),
-            };
+            try {
+              saida.sonda = {
+                ...(saida.sonda as object),
+                diagnostico: await dbg.call(p, pedido),
+              };
+            } catch (e: any) {
+              saida.sonda = {
+                ...(saida.sonda as object),
+                diagnostico: { erro: String(e?.message || e).slice(0, 200) },
+              };
+            }
           }
         }
       } catch (e: any) {
