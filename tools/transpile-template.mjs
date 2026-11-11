@@ -145,6 +145,9 @@ function interp(rawIn, scope) {
 /** Campos de uma linha classificados por familia (ver familiaDeCampo). */
 const campos = [];
 
+/** O template usa `style="{{ expr }}"`? So' entao o import e' emitido. */
+let usouCssInline = false;
+
 const hoverRules = [];
 function addHoverRule(decls) {
   const cls = 'svh-' + hoverRules.length;
@@ -158,6 +161,18 @@ function emitStyle(raw, scope) {
   const parts = [];
   for (const d of splitDecls(raw)) {
     if (!d.trim()) continue;
+
+    // No v3 uma interpolacao pode valer por DECLARACOES INTEIRAS no meio do
+    // style: `style="display:flex;gap:6px;{{ tr.trW }}"`. Vira spread, e a
+    // ordem e' preservada porque em CSS a ultima declaracao vence — que e'
+    // exatamente como o spread de objeto se comporta.
+    const soExpr = d.match(/^\s*\{\{([^{}]*)\}\}\s*$/);
+    if (soExpr) {
+      usouCssInline = true;
+      parts.push(`...cssInline(${scopeExpr(soExpr[1], scope)})`);
+      continue;
+    }
+
     const kv = splitDecl(d);
     if (!kv) throw new Error('declaracao CSS sem ":" -> ' + JSON.stringify(d));
     const [prop, value] = kv;
@@ -235,7 +250,18 @@ function emitAttrs(node, scope) {
     }
 
     if (name === 'style') {
-      out.push(`style={${emitStyle(raw, scope)}}`);
+      // O v3 passou a montar alguns `style` inteiros em runtime, como string
+      // (`style="{{ r.zs }}"`). Nao da' para resolver isso em build: o valor so'
+      // existe quando a cena e' desenhada. Vai para cssInline(), que aplica as
+      // MESMAS regras de divisao deste arquivo — um style escrito a' mao e um
+      // montado em runtime precisam chegar ao mesmo objeto.
+      const soExpr = raw.match(/^\s*\{\{([^{}]*)\}\}\s*$/);
+      if (soExpr) {
+        usouCssInline = true;
+        out.push(`style={cssInline(${scopeExpr(soExpr[1], scope)})}`);
+      } else {
+        out.push(`style={${emitStyle(raw, scope)}}`);
+      }
       continue;
     }
 
@@ -392,7 +418,7 @@ const tsx = `// GENERATED por tools/transpile-template.mjs — NAO EDITAR A MAO.
 // altere espacos em branco.
 import React, { Fragment } from 'react';
 import './hover.css';
-
+${usouCssInline ? "import { cssInline } from '@/lib/oracle/css-inline';\n" : ''}
 export default function OracleView({ v }: { v: any }) {
   return (
     <>${jsx}

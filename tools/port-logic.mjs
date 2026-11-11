@@ -60,20 +60,26 @@ const TAIL = slice(L_INGEST, linhas.length); // ingest() ... renderVals() ... fe
 // ---------------------------------------------------------------- prelúdio
 //
 // Copiado inteiro. Só os acessores aos globais mudam: no artifact os dados
-// vinham de <script> no documento; aqui são módulos JSON.
-let prelude = PRELUDE_ORIG
-  .replace(
-    'const R = () => window.SV_REGRAS, L = () => window.SV_LIVROS, S = () => window.SV_SECULO;',
-    'const R = () => REGRAS as any, L = () => LIVROS as any, S = () => SECULO as any;',
-  )
-  .replace(
-    'const modsOf = e => (window.SV_REGRAS && window.SV_REGRAS[e] && window.SV_REGRAS[e].mods) || [];',
-    'const modsOf = e => (R() && R()[e] && R()[e].mods) || [];',
-  );
+// vinham de <script> no documento; aqui são módulos.
+//
+// A troca é uma substituição de IDENTIFICADOR, não de linha: `window.SV_REGRAS`
+// vira `SV_REGRAS`, que o cabeçalho define a partir do JSON. A primeira versão
+// casava linhas inteiras e quebrou quando o designer acrescentou
+// SV_HAB_MIGRA e SV_HAB_REN — trocar o prefixo pega os globais novos sozinha, e
+// o invariante abaixo cobre o caso de aparecer um que não saibamos ligar.
+const GLOBAIS = ['SV_REGRAS', 'SV_LIVROS', 'SV_SECULO', 'SV_HAB_MIGRA', 'SV_HAB_REN'];
 
-if (prelude.includes('window.SV_')) {
-  throw new Error('sobrou acesso a window.SV_* no prelúdio: ' + (prelude.match(/window\.SV_\w+/g) || []).join(', '));
-}
+const desglobalizar = (txt) => txt.replace(/\bwindow\.(SV_\w+)/g, (todo, nome) => {
+  if (!GLOBAIS.includes(nome)) {
+    throw new Error(
+      `global SV_* desconhecido: window.${nome}. Ligue-o em GLOBAIS (e no CABECALHO) ` +
+        'antes de gerar, ou o código portado vai lê-lo como undefined em runtime.',
+    );
+  }
+  return nome;
+});
+
+let prelude = desglobalizar(PRELUDE_ORIG);
 
 const CABECALHO = `// GENERATED por tools/port-logic.mjs a partir de source/component.js — NAO EDITAR A MAO.
 //
@@ -90,6 +96,13 @@ import REGRAS from './data/regras.json';
 import LIVROS from './data/livros.json';
 import SECULO from './data/seculo.json';
 import { lerExtensoes, aplicarExtensoes, stripMarks } from './extensions';
+import { SV_HAB_MIGRA, SV_HAB_REN } from './migra-habilidades';
+
+// Os globais que o artifact lia de <script> no documento. Ver desglobalizar()
+// em tools/port-logic.mjs.
+const SV_REGRAS: any = REGRAS;
+const SV_LIVROS: any = LIVROS;
+const SV_SECULO: any = SECULO;
 import type { Store, SaveShape } from './store';
 
 type Props = {
@@ -239,7 +252,7 @@ const SUBS_HEAD = [
   ],
 ];
 
-let head = HEAD;
+let head = desglobalizar(HEAD);
 for (const [de, para] of SUBS_HEAD) {
   if (!head.includes(de)) throw new Error('substituição não encontrada no HEAD: ' + de.slice(0, 60));
   head = head.split(de).join(para);
@@ -264,7 +277,7 @@ const GEN_NPC_NOVO = `      genNpc:async()=>{ if(this.state.busy) return; this.s
         }catch(err){ this.addLog({k:'mech',who:'Erro',text:'Não foi possível gerar o NPC.'}); }
         this.setState({busy:false}); },`;
 
-let tail = TAIL.replace(mGen[0], GEN_NPC_NOVO);
+let tail = desglobalizar(TAIL).replace(mGen[0], GEN_NPC_NOVO);
 if (/window\.claude/.test(tail)) {
   throw new Error('sobrou window.claude no corpo portado');
 }

@@ -9,6 +9,8 @@
   "fundos/perseguicao.jpg",
   "fundos/silhuetas.jpg",
   "musica/alex-morgan-noir-jazz-detective-midnight-mystery-587403.mp3",
+  "musica/alex-morgan-surf-rock-591326.mp3",
+  "musica/emand_edroff-la-siesta-del-pistolero-616040.mp3",
   "musica/konstantinpazuzustudio-crime-scene-investigation-asmr-noir-jazz-520242.mp3",
   "musica/konstantinpazuzustudio-forensic-evidence-asmr-noir-jazz-520236.mp3",
   "musica/konstantinpazuzustudio-gritty-noir-asmr-noir-jazz-520243.mp3",
@@ -19,7 +21,15 @@
   "musica/madstock-noir-340140.mp3",
   "musica/markmusicstudio-noir-piano-club-572124.mp3",
   "musica/noirtales-film-noir-566510.mp3",
+  "musica/positive_sound-spaghetti-western-491538.mp3",
+  "musica/sub_clair-funk-instrumental-610619.mp3",
   "sons/papel.mp3"
  ],
- "faltando": []
+ "faltando": [
+  "musica/abydos_music-energetic-garage-rock-171763.mp3",
+  "musica/luis_humanoide-western-theme-162884.mp3",
+  "musica/octosound-cobra-169065.mp3",
+  "musica/remstunes-spy-surf-392415.mp3",
+  "musica/vlad_annenkov-tarantino-blues-quotmidnight-mirage-471931.mp3"
+ ]
 }

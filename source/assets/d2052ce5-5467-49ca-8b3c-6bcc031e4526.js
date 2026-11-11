@@ -3,7 +3,7 @@
   if (window.__svSom) return; window.__svSom = true;
 
   var M = 'musica/';
-  var TRACKS = [
+  var TRACKS_34 = [
     {f:'noirtales-film-noir-566510.mp3', t:'Film Noir', a:'NoirTales'},
     {f:'markmusicstudio-noir-piano-club-572124.mp3', t:'Noir Piano Club', a:'Mark Music Studio'},
     {f:'konstantinpazuzustudio-crime-scene-investigation-asmr-noir-jazz-520242.mp3', t:'Crime Scene Investigation', a:'Konstantin Pazuzu'},
@@ -17,6 +17,21 @@
     {f:'konstantinpazuzustudio-gritty-noir-asmr-noir-jazz-520243.mp3', t:'Gritty Noir', a:'Konstantin Pazuzu'}
   ];
 
+  var TRACKS_94 = [
+    {f:'alex-morgan-surf-rock-591326.mp3', t:'Surf Rock', a:'Alex Morgan'},
+    {f:'vlad_annenkov-tarantino-blues-quotmidnight-mirage-471931.mp3', t:'Midnight Mirage', a:'Vlad Annenkov'},
+    {f:'sub_clair-funk-instrumental-610619.mp3', t:'Funk Instrumental', a:'Sub Clair'},
+    {f:'emand_edroff-la-siesta-del-pistolero-616040.mp3', t:'La Siesta del Pistolero', a:'Emand Edroff'},
+    {f:'remstunes-spy-surf-392415.mp3', t:'Spy Surf', a:'RemsTunes'},
+    {f:'octosound-cobra-169065.mp3', t:'Cobra', a:'Octosound'},
+    {f:'positive_sound-spaghetti-western-491538.mp3', t:'Spaghetti Western', a:'Positive Sound'},
+    {f:'abydos_music-energetic-garage-rock-171763.mp3', t:'Energetic Garage Rock', a:'Abydos Music'},
+    {f:'luis_humanoide-western-theme-162884.mp3', t:'Western Theme', a:'Luis Humanoide'}
+  ];
+  /* trilha por era: 1934 noir jazz; 1994 surf, funk e western do cinema pulp */
+  var LISTS = {'1934':TRACKS_34, '1994':TRACKS_94};
+  var curEra = window.__svEraSent || 'home';
+  var TRACKS = LISTS[curEra] || TRACKS_34;
   function get(k,d){ try{ var v=localStorage.getItem('svSom.'+k); return v===null?d:v; }catch(e){ return d; } }
   function set(k,v){ try{ localStorage.setItem('svSom.'+k,String(v)); }catch(e){} }
 
@@ -24,7 +39,7 @@
   var muted = get('mute','0')==='1';
   var wantOff = get('off','0')==='1';
   var collapsed = get('min','0')==='1';
-  var idx = Math.floor(Math.random()*TRACKS.length);
+  var idx = 0; /* cada era começa pela faixa-tema: Film Noir (1934), Surf Rock (1994) */
   var audio = new Audio(); audio.preload='none'; audio.volume=0;
   var fadeT=null, started=false;
 
@@ -170,6 +185,12 @@
     }
     function pause(){ fadeTo(0,500,function(){ audio.pause(); }); wantOff=true; set('off','1'); }
     function skip(d){ var was=!audio.paused||!started; fadeTo(0,350,function(){ load(idx+d); if(was) play(); }); }
+    /* abrir uma era: troca a lista e toca a faixa-tema na hora; voltar ao início mantém o que estava tocando */
+    function setEra(e){ e=e||'home'; if(e===curEra) return; var prev=curEra; curEra=e;
+      var list=LISTS[e]||TRACKS_34, isEra=!!LISTS[e];
+      if(!isEra){ if(TRACKS===list) return; var was=started&&!audio.paused&&!wantOff; fadeTo(0,450,function(){ audio.pause(); TRACKS=list; load(0); fails=0; if(was) play(); }); return; }
+      fadeTo(0,450,function(){ audio.pause(); TRACKS=list; load(0); fails=0; play(); }); }
+    window.addEventListener('sv-era',function(ev){ setEra(ev.detail); });
 
     bPlay.addEventListener('click',function(){ audio.paused?play():pause(); });
     bNext.addEventListener('click',function(){ skip(1); });
@@ -215,4 +236,21 @@
     load(idx); paintVol(); paintState();
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',build); else build();
+})();
+
+/* Crônica: o topo da barra de texto alinha com o topo da caixa Vantagens (desktop, 1934 e 1994) */
+(function(){
+  if (window.__svAlign) return; window.__svAlign = true;
+  var root=document.documentElement, cur=420;
+  function tick(){
+    var mb=document.querySelector('.sv-side-lim'); if(mb&&mb.offsetParent){ var bw=Math.floor(mb.clientWidth); if(bw>0&&bw!==window.__svBarT){ window.__svBarT=bw; try{ window.__svApp&&window.__svApp.setState({_barT:bw}); }catch(e){} } }
+    var log=document.querySelector('.sv-log'), cmp=document.querySelector('.sv-compose'), vant=document.querySelector('.sv-vant');
+    if(!log||!cmp||!vant||!log.offsetParent||!vant.offsetParent){ return; }
+    var lr=log.getBoundingClientRect(), vr=vant.getBoundingClientRect(), cr=cmp.getBoundingClientRect();
+    var side = vr.left >= lr.right - 2;
+    var want = 420;
+    if(side){ want = Math.max(420, Math.round(log.offsetHeight + (vr.top - cr.top))); }
+    if(Math.abs(want-cur)>=1){ cur=want; root.style.setProperty('--sv-log-min', want+'px'); }
+  }
+  setInterval(tick, 250); window.addEventListener('resize', tick);
 })();
