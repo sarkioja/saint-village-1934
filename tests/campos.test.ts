@@ -41,9 +41,23 @@ describe('padronização dos campos de uma linha', () => {
     expect(semClasse.map((t) => t.slice(0, 120))).toEqual([]);
   });
 
-  it('todo input de texto declara a família dele', () => {
-    const semClasse = inputs.filter((t) => !/svf-box|svf-line/.test(t));
-    expect(semClasse.map((t) => t.slice(0, 120))).toEqual([]);
+  it('todo input de texto COM BORDA declara a família dele', () => {
+    // Campo sem borda nenhuma fica de fora de propósito: não há caixa nem
+    // sublinhado para alinhar, e impor 44px de altura quebraria a linha densa
+    // onde ele vive. O que não pode é um campo COM borda escapar — foi assim
+    // que os dois campos do login do v3 quase passaram sem padronização, por
+    // estarem estilizados por classe em vez de style inline.
+    const comBorda = inputs.filter((t) => /border/i.test(t) && !/border:\s*\\?"?none/i.test(t));
+    const semFamilia = comBorda.filter((t) => !/svf-box|svf-line/.test(t));
+    expect(semFamilia.map((t) => t.slice(0, 120))).toEqual([]);
+  });
+
+  it('o campo estilizado por classe também é classificado', () => {
+    // .sv-login-i é `border:none;border-bottom:1px` no CSS, não no style
+    // inline: pertence à família sublinhado e tem de carregar a classe.
+    const login = TSX.match(/<input[^>]*sv-login-i[^>]*>/g) ?? [];
+    expect(login.length).toBeGreaterThan(0);
+    for (const t of login) expect(t).toMatch(/svf-line/);
   });
 
   it('nenhum campo cai em duas famílias', () => {

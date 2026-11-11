@@ -3,7 +3,9 @@ import { buildSystemPrompt } from '@/lib/server/prompt';
 import { loadBook } from '@/lib/server/book';
 import REGRAS from '@/lib/oracle/data/regras.json';
 
-const ERAS = ['1934', '1946', '1974', '1994', '1999'];
+// As eras vêm dos dados: o designer já foi de 5 para 2, e uma lista fixa aqui
+// só sabia dizer que o teste quebrou, não que o jogo encolheu.
+const ERAS = Object.keys(REGRAS as any).filter((k) => /^\d{4}$/.test(k)).sort();
 
 function fixture(era: string) {
   return {
@@ -141,11 +143,16 @@ describe('marcações das automações no prompt', () => {
     expect(full).toContain('Black Rock e a Ponte');
   });
 
-  it('pede [FIO-NOVO: …] só onde existe Mural', () => {
-    const comMural = buildSystemPrompt(fixture('1974') as any).full;
-    const semMural = buildSystemPrompt(fixture('1934') as any).full;
-    expect(comMural).toContain('[FIO-NOVO:');
-    expect(semMural).not.toContain('[FIO-NOVO:');
+  it('pede [FIO-NOVO: …] só onde existe Mural — hoje, em nenhuma era', () => {
+    // O v3 tirou o mod `mural` das duas eras, então a marcação não deve
+    // aparecer em lugar nenhum. A automação continua no código e volta sozinha
+    // se o designer reativar o Mural; é este teste que avisa quando isso
+    // acontecer, em vez de deixá-la ligada calada.
+    const comMural = ERAS.filter((e) => ((REGRAS as any)[e].mods || []).includes('mural'));
+    for (const era of ERAS) {
+      const full = buildSystemPrompt(fixture(era) as any).full;
+      expect(full.includes('[FIO-NOVO:')).toBe(comMural.includes(era));
+    }
   });
 
   it('pede [CASO: …] enquanto o caso está incompleto e para quando não está', () => {

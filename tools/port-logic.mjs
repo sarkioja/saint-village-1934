@@ -33,6 +33,26 @@ const L_PROMPT = acha(/^\s{2}systemPrompt\(/, 'systemPrompt()');
 const L_NARRATE = acha(/^\s{2}async narrate\(/, 'narrate()');
 const L_INGEST = acha(/^\s{2}ingest\(/, 'ingest()');
 
+/** Primeira linha DEPOIS de `apos` que abre outro método da classe. */
+function proximoMetodo(apos) {
+  for (let i = apos; i < linhas.length; i++) {
+    if (/^ {2}(async )?[a-zA-Z_][a-zA-Z0-9_]*\(/.test(linhas[i])) return i + 1;
+  }
+  throw new Error('não achei o método seguinte a partir da linha ' + apos);
+}
+
+// Onde systemPrompt() termina e' o proximo metodo, nao narrate(): no v3 o
+// designer meteu askDirector() entre os dois, e a fatia o engolia inteiro
+// junto com o `this.` dele — que o invariante de baixo acusou.
+const L_PROMPT_FIM = proximoMetodo(L_PROMPT);
+
+// O bloco que transforma o narrador em juiz de regras, usado pelo modo
+// "dúvida". Sai daqui verbatim e vai para o servidor junto com o resto do
+// prompt: é texto de prompt, e o lugar dele é ao lado do systemPrompt.
+const mJuiz = src.match(/const juiz=(`[\s\S]*?`);/);
+if (!mJuiz) throw new Error('bloco `juiz` de askDirector() não encontrado');
+const PROMPT_JUIZ = mJuiz[1];
+
 if (!(L_CLASSE < L_PROMPT && L_PROMPT < L_NARRATE && L_NARRATE < L_INGEST)) {
   throw new Error('a ordem dos métodos mudou — revise o porter antes de confiar nas fatias');
 }
@@ -47,7 +67,7 @@ const HEAD = slice(L_CLASSE, L_PROMPT - 1); // classe + métodos até systemProm
 // linhas em branco e o `  }` final — removidos aqui, com verificação, para um
 // `}` sobrando não virar um erro de sintaxe a 120 linhas de distância.
 const PROMPT_BODY = (() => {
-  const l = slice(L_PROMPT + 1, L_NARRATE - 1).split('\n');
+  const l = slice(L_PROMPT + 1, L_PROMPT_FIM - 1).split('\n');
   while (l.length && !l[l.length - 1].trim()) l.pop();
   if (l[l.length - 1].trim() !== '}') {
     throw new Error('systemPrompt() não termina em "}": ' + JSON.stringify(l[l.length - 1]));
@@ -208,6 +228,40 @@ const NARRATE = `
   }
 
   /**
+   * Modo "dúvida": pergunta de regras ao Diretor, fora de cena.
+   *
+   * Mesmo caminho da narração — o prompt (e o bloco de juiz) ficam no servidor,
+   * onde estão o texto do livro e a chave. A resposta não passa pelo ingest():
+   * não é cena, é arbitragem, e por isso não carrega marcação nenhuma.
+   */
+  async askDirector(q){
+    if(this.state.busy) return;
+    this.setState({busy:true});
+    const d=this.cur();
+    try{
+      const res = await fetch('/api/duvida', {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify({
+          era: this.state.era,
+          pergunta: q,
+          char: d.char, caso: d.caso, cena: d.cena,
+          naCena: d.naCena.map(id=>this.npcById(id)).filter(Boolean).map(n=>this.fmtNpc(n)),
+          history: d.log.slice(-(this.props.historyTurns||18)).map(e=>this.fmt(e)),
+          prefs: { modeloIA: this.props.modeloIA || 'haiku' },
+        }),
+      });
+      if(res.status===429){ const j=await res.json().catch(()=>({}));
+        this.addLog({k:'mech',who:'Arquivo',text:j.message||'Os arquivos da cidade fecham por hoje.'});
+        this.setState({busy:false}); return; }
+      if(!res.ok) throw new Error('duvida '+res.status);
+      const j=await res.json();
+      this.addLog({k:'rule',who:'Diretor · Regras',text:j.resposta||'Sem resposta. Reformule a pergunta.'});
+    }catch(err){ this.addLog({k:'mech',who:'Erro',text:'O Diretor não respondeu. Tente de novo.'}); }
+    this.setState({busy:false});
+  }
+
+  /**
    * Memória longa: a cada N turnos pede um parágrafo de resumo e o guarda no
    * caso. O prompt passa a levar resumo + histórico recente, em vez de só as
    * últimas entradas — o narrador para de esquecer o começo da crônica, e em
@@ -242,13 +296,22 @@ const RENDER = `
 const SUBS_HEAD = [
   ['class Component extends DCLogic {', 'export default class OracleLogic extends React.Component<Props, any> {'],
   [
+    // O estado inicial da conta tem precedencia sobre o que esta' no navegador:
+    // quem abre a cronica em outro dispositivo tem de ver o progresso dela, nao
+    // um save local velho. Sem conta, `initial` e' nulo e vale o load() local.
     "state = Object.assign({ era:null, tab:'cronica', eras:{} }, load()||{}, {",
-    "state = Object.assign({ era:null, tab:'cronica', eras:{} }, this.props.initial||{}, {",
+    "state = Object.assign({ era:null, tab:'cronica', eras:{} }, load()||{}, this.props.initial||{}, {",
   ],
   [
-    // O v2 passou a persistir também a câmera do mapa (zoom e pan).
-    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz}=this.state; try{ localStorage.setItem(LS, JSON.stringify({era,tab,eras,mapZ,mapX,mapY,mapFz})); }catch(e){} }",
-    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz}=this.state; this.props.store.write({era,tab,eras,mapZ,mapX,mapY,mapFz}); }",
+    // O v3 grava por PERFIL: a chave de localStorage passou a ser
+    // `sv-cronica-v2::<slug>`, e sem perfil escolhido nao grava nada.
+    //
+    // A gravacao local fica INTACTA — e' ela que faz os perfis do designer
+    // funcionarem sem servidor nenhum. O Store do projeto entra POR CIMA, nao
+    // no lugar: quem esta' numa conta ganha a copia durável e o sync entre
+    // dispositivos; quem nao esta' continua com o comportamento do artifact.
+    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz,perfil}=this.state; if(!perfil) return; try{ localStorage.setItem(lsKey(), JSON.stringify({era,tab,eras,mapZ,mapX,mapY,mapFz,savedAt:Date.now()})); }catch(e){} this.cloudSync(); }",
+    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz,perfil}=this.state; if(!perfil) return; const snap={era,tab,eras,mapZ,mapX,mapY,mapFz,savedAt:Date.now()}; try{ localStorage.setItem(lsKey(), JSON.stringify(snap)); }catch(e){} if(this.props.store) this.props.store.write(snap); this.cloudSync(); }",
   ],
 ];
 
@@ -313,6 +376,35 @@ const out =
   RENDER +
   '}\n';
 
+// Invariante: todo metodo chamado como `this.x(` tem de existir na classe.
+//
+// O v3 custou esta verificacao. O designer acrescentou askDirector() entre
+// systemPrompt() e narrate(), e as fatias do porter o descartaram junto com o
+// narrate que e' substituido — o botao de "duvida" chamava um metodo que nao
+// existia mais. Nada acusou: tsc nao reclama com @ts-nocheck, o build passou e
+// so' quebraria no clique do jogador. Agora quebra aqui.
+{
+  const corpo = out.slice(out.indexOf('export default class'));
+  const definidos = new Set(
+    [...corpo.matchAll(/^ {2}(?:async\s+)?([a-zA-Z_][\w]*)\s*\(/gm)].map((m) => m[1]),
+  );
+  // Campos de classe atribuidos a funcao (`onMapWheel = ev => ...`) tambem valem.
+  for (const m of corpo.matchAll(/^ {2}([a-zA-Z_][\w]*)\s*=/gm)) definidos.add(m[1]);
+
+  const HERDADOS = new Set(['setState', 'forceUpdate', 'render', 'props', 'state']);
+  const chamados = new Set(
+    [...corpo.matchAll(/this\.([a-zA-Z_][\w]*)\s*\(/g)].map((m) => m[1]),
+  );
+  const faltando = [...chamados].filter((n) => !definidos.has(n) && !HERDADOS.has(n));
+  if (faltando.length) {
+    throw new Error(
+      'método chamado mas não definido no código portado: ' +
+        faltando.join(', ') +
+        '. Alguma fatia do porter o descartou — confira a ordem dos métodos em source/component.js.',
+    );
+  }
+}
+
 writeFileSync('lib/oracle/logic.tsx', out);
 
 // ===========================================================================
@@ -325,6 +417,9 @@ writeFileSync('lib/oracle/logic.tsx', out);
 let body = PROMPT_BODY;
 
 const SUBS_PROMPT = [
+  ['this.invBonus(', 'invBonus(era, '],
+  ['this.invEf(', 'invEf(era, '],
+  ['this.invRes(', 'invRes(era, '],
   [
     "    const s=this.state, era=s.era, RR=R()[era], LL=L()[era], d=this.cur(), c=d.char, med=RR.medidor.n;",
     "    const RR: any = (REGRAS as any)[era], SS: any = SECULO as any, med = RR.medidor.n;\n" +
@@ -424,11 +519,41 @@ export type PromptInput = {
   book: BookText;
 };
 
-/** Do prelúdio do artifact, usado na descrição da ficha. */
-const stateOf = (v: number, kind: string) =>
-  kind === 'saude'
-    ? v > 0 ? 'Inteiro' : v > -6 ? 'Ferido' : v > -12 ? 'Gravemente ferido' : 'Morto'
-    : v > 0 ? 'Inteiro' : v > -6 ? 'Abalado' : v > -12 ? 'Marcado' : 'Quebrado';
+// Os globais do artifact, como em lib/oracle/logic.tsx.
+const SV_REGRAS: any = REGRAS;
+const SV_LIVROS: any = LIVROS;
+const SV_SECULO: any = SECULO;
+
+// ---------------------------------------------------------------- prelúdio
+//
+// O prelúdio inteiro do artifact, verbatim, porque systemPrompt() usa dele
+// bem mais do que parece: stateOf, invList, hn, HAB_ERA, nomePapel, R()...
+// Copiar a mao so' o que parece necessario era escolher a dedo o fecho de uma
+// funcao alheia — e foi assim que o v3 quebrou, quando o designer passou a
+// chamar mais tres helpers daqui. Nada no prelúdio toca DOM em tempo de
+// carga (o que toca esta' dentro de corpo de funcao), entao roda no servidor.
+${prelude}
+
+/* Eram métodos da classe; aqui recebem a era em vez de lê-la do estado. */
+function invBonus(era: any, c: any) {
+  const RR = R()[era];
+  if (!RR || !c || !c.arq) return {} as any;
+  const oc = (RR.arquetipos || []).find((a: any) => a.n === c.arq);
+  if (!oc || !oc.v) return {} as any;
+  // Barras dobradas de propósito: isto vive dentro de um template literal, e
+  // uma barra simples aqui chegaria ao arquivo gerado como letra solta.
+  const nomes = invList(era), out: any = {}, re = /\\+(\\d+)\\s+(?:pontos?\\s+)?em\\s+([^).,;:]+)/gi;
+  let m: any;
+  while ((m = re.exec(oc.v))) {
+    const alvo = m[2].trim().toLowerCase();
+    const k = nomes.find((n: any) => n.toLowerCase() === alvo || hn(era, n).toLowerCase() === alvo);
+    if (k) out[k] = (out[k] || 0) + parseInt(m[1]);
+  }
+  return out;
+}
+const invEf = (era: any, c: any, k: any) => ((c.inv || {})[k] ?? 0) + (invBonus(era, c)[k] || 0);
+const invRes = (era: any, c: any, k: any) =>
+  Math.max(0, invEf(era, c, k) - 1 - ((c.invGasto || {})[k] || 0));
 
 /** Era método da classe; aqui recebe as pistas do caso. */
 function fioTxt(f: any, i: number, pistas: any[]) {
@@ -444,6 +569,12 @@ function fioTxt(f: any, i: number, pistas: any[]) {
  * turnos da mesma crônica na mesma região (~7.100 tokens) e por isso recebe
  * cache_control no adapter da Anthropic; \`volatile\` muda a cada turno.
  */
+/**
+ * Vira o narrador em juiz de regras, para o modo "dúvida" (askDirector).
+ * Copiado verbatim do artifact; o designer o reescreve junto com o resto.
+ */
+export const PROMPT_JUIZ = ${PROMPT_JUIZ};
+
 export function buildSystemPrompt(input: PromptInput): { stable: string; volatile: string; full: string } {
   const full = systemPromptBody(input);
   const MARK = '\\nFICHA DO PERSONAGEM:';
@@ -462,7 +593,7 @@ writeFileSync('lib/server/prompt.ts', prompt);
 
 console.log('prelúdio    : linhas 1-' + (L_CLASSE - 1), `(${PRELUDE_ORIG.split('\n').length} linhas, verbatim)`);
 console.log('HEAD        : linhas ' + L_CLASSE + '-' + (L_PROMPT - 1));
-console.log('systemPrompt: linhas ' + L_PROMPT + '-' + (L_NARRATE - 1) + ' -> lib/server/prompt.ts');
+console.log('systemPrompt: linhas ' + L_PROMPT + '-' + (L_PROMPT_FIM - 1) + ' -> lib/server/prompt.ts');
 console.log('TAIL        : linhas ' + L_INGEST + '-' + linhas.length);
 console.log('midia       :', achouMidia.size, 'caminhos absolutizados:', [...achouMidia].sort().join(', '));
 console.log('logic.tsx   :', out.length, 'bytes');

@@ -97,10 +97,10 @@ export default function OracleView({ v }: { v: any }) {
                   <span style={{fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "13px", lineHeight: "1.5", color: "#8f8f91"}}>{"Deixe um nome na recepção. Ninguém pede documento. Se quiser, quatro números trancam a gaveta."}</span></div>{"\n        "}
                 <label style={{display: "flex", flexDirection: "column", gap: "6px"}}>
                   <span className={"sv-login-l"}>{"Nome"}</span>
-                  <input value={v.loginNome} onChange={v.onLoginNome} onKeyDown={v.onLoginKey} placeholder={"Jack Reilly"} autoComplete={"nickname"} maxLength={40} className={"sv-login-i"} /></label>{"\n        "}
+                  <input value={v.loginNome} onChange={v.onLoginNome} onKeyDown={v.onLoginKey} placeholder={"Jack Reilly"} autoComplete={"nickname"} maxLength={40} className={"sv-login-i" + " svf-line"} /></label>{"\n        "}
                 <label style={{display: "flex", flexDirection: "column", gap: "6px"}}>
                   <span className={"sv-login-l"}>{"PIN · opcional"}</span>
-                  <input value={v.loginPin} onChange={v.onLoginPin} onKeyDown={v.onLoginKey} placeholder={"* * * *"} inputMode={"numeric"} autoComplete={"off"} maxLength={4} className={"sv-login-i sv-login-pin"} /></label>{"\n        "}
+                  <input value={v.loginPin} onChange={v.onLoginPin} onKeyDown={v.onLoginKey} placeholder={"* * * *"} inputMode={"numeric"} autoComplete={"off"} maxLength={4} className={"sv-login-i sv-login-pin" + " svf-line"} /></label>{"\n        "}
                 {v.hasLoginErr ? (<>
                   <div role={"alert"} style={{fontFamily: "var(--sv-type,'Special Elite',monospace)", fontSize: "13px", color: "#e06b70"}}>{v.loginErr}</div></>) : null}{"\n        "}
                 <button onClick={v.doLogin} className={"sv-login-b"}>{"Abrir o arquivo"}</button>
@@ -789,7 +789,7 @@ export default function OracleView({ v }: { v: any }) {
                     <div className={"svr-row"}>{"\n                "}
                       <label style={{flex: "1 1 220px"}} className={"svr-field"}>
                         <span className={"svr-lbl"}>{"Habilidade"}</span>
-                        <select value={v.soloHab} onChange={v.onSoloHab} className={"svr-sel"}>
+                        <select value={v.soloHab} onChange={v.onSoloHab} className={"svr-sel" + " svf-box"}>
                           {(v.geraisView ?? []).map((g: any, g__i: number) => (<Fragment key={g__i}>
                             <option value={g.k}>{g.label}</option></Fragment>))}</select></label>{"\n                "}
                       <div className={"svr-field"}>
@@ -839,7 +839,7 @@ export default function OracleView({ v }: { v: any }) {
                     <div className={"svr-help"}>{"Quando um golpe ou um tiro acerta. O total sai da Vitalidade de quem foi atingido."}</div>{"\n              "}
                     <label className={"svr-field"}>
                       <span className={"svr-lbl"}>{"Arma"}</span>
-                      <select value={v.danoArma} onChange={v.onDanoArma} className={"svr-sel"}>
+                      <select value={v.danoArma} onChange={v.onDanoArma} className={"svr-sel" + " svf-box"}>
                         {(v.armas ?? []).map((a: any, a__i: number) => (<Fragment key={a__i}>
                           <option value={a.i}>{a.label}</option></Fragment>))}</select></label>{"\n              "}
                     <div style={{justifyContent: "space-between"}} className={"svr-row"}>{"\n                "}
@@ -852,7 +852,7 @@ export default function OracleView({ v }: { v: any }) {
                     <div className={"svr-help"}>{"Quando o personagem vê algo que abala os nervos: sangue, culpa, horror."}</div>{"\n              "}
                     <label className={"svr-field"}>
                       <span className={"svr-lbl"}>{"O que aconteceu"}</span>
-                      <select value={v.choqueI} onChange={v.onChoque} className={"svr-sel"}>
+                      <select value={v.choqueI} onChange={v.onChoque} className={"svr-sel" + " svf-box"}>
                         {(v.choques ?? []).map((c: any, c__i: number) => (<Fragment key={c__i}>
                           <option value={c.i}>{c.label}</option></Fragment>))}</select></label>{"\n              "}
                     <button style={{alignSelf: "flex-start"}} onClick={v.rollChoqueSel} className={"svr-roll"}>{"Rolar choque"}</button>{"\n            "}</div>{"\n\n            "}

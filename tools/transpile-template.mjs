@@ -198,14 +198,54 @@ function emitStyle(raw, scope) {
  * Devolve null para o que nao e campo de uma linha (textarea, checkbox, o
  * range do player) ou nao tem style inline (o .svr-sel ja nasce canonico).
  */
+/** Lê a familia das regras do CSS gerado, para campos estilizados por classe. */
+function familiasDoCss() {
+  const mapa = new Map();
+  let css = '';
+  try {
+    css = readFileSync('app/oracle.css', 'utf8');
+  } catch {
+    return mapa; // extract-css ainda nao rodou; so' a classificacao inline vale
+  }
+  for (const m of css.matchAll(/\.([a-zA-Z][\w-]*)\s*\{([^}]*)\}/g)) {
+    const [, classe, corpo] = m;
+    const f = familiaDeDeclaracoes(corpo);
+    // A primeira regra que decide vence, como no cascata para este caso: o
+    // designer declara a borda uma vez e depois so' ajusta detalhe.
+    if (f && !mapa.has(classe)) mapa.set(classe, f);
+  }
+  return mapa;
+}
+
+/** A regra comum: borda nos quatro lados e' caixa; so' border-bottom e' sublinhado. */
+function familiaDeDeclaracoes(css) {
+  if (/(^|;)\s*border\s*:\s*(?!none)/.test(css)) return 'svf-box';
+  if (/(^|;)\s*border-bottom\s*:\s*(?!none)/.test(css)) return 'svf-line';
+  return null;
+}
+
+const FAMILIA_POR_CLASSE = familiasDoCss();
+
 function familiaDeCampo(tag, attribs) {
   if (tag !== 'select' && tag !== 'input') return null;
   const tipo = (attribs.type || 'text').toLowerCase();
   const TEXTO = ['text', 'search', 'tel', 'url', 'email', 'number', 'password'];
   if (tag === 'input' && !TEXTO.includes(tipo)) return null;
-  const style = attribs.style || '';
-  if (/(^|;)\s*border\s*:\s*(?!none)/.test(style)) return 'svf-box';
-  if (/(^|;)\s*border-bottom\s*:/.test(style)) return 'svf-line';
+
+  // O style inline manda: e' o mais especifico e e' onde o designer escreve a
+  // maioria dos campos.
+  const porStyle = familiaDeDeclaracoes(attribs.style || '');
+  if (porStyle) return porStyle;
+
+  // Campo estilizado por classe — o v3 trouxe os do login assim. Sem esta
+  // consulta eles ficavam de fora da padronizacao sem ninguem notar.
+  for (const classe of (attribs.class || '').trim().split(/\s+/)) {
+    const f = FAMILIA_POR_CLASSE.get(classe);
+    if (f) return f;
+  }
+
+  // Campo sem borda nenhuma nao pertence a familia alguma: nao ha' caixa para
+  // alinhar, e forcar altura nele quebraria a linha densa onde ele vive.
   return null;
 }
 

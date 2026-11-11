@@ -6,8 +6,17 @@
   "fundos/briga.jpg",
   "fundos/cais.jpg",
   "fundos/mesa.jpg",
+  "fundos/noir1.jpg",
+  "fundos/noir2.jpg",
+  "fundos/noir3.jpg",
+  "fundos/noir4.jpg",
+  "fundos/noir5.jpg",
+  "fundos/noir6.jpg",
+  "fundos/noir7.jpg",
+  "fundos/noir8.jpg",
   "fundos/perseguicao.jpg",
   "fundos/silhuetas.jpg",
+  "musica/abydos_music-energetic-garage-rock-171763.mp3",
   "musica/alex-morgan-noir-jazz-detective-midnight-mystery-587403.mp3",
   "musica/alex-morgan-surf-rock-591326.mp3",
   "musica/emand_edroff-la-siesta-del-pistolero-616040.mp3",
@@ -18,18 +27,16 @@
   "musica/konstantinpazuzustudio-police-interrogation-asmr-noir-jazz-520244.mp3",
   "musica/konstantinpazuzustudio-suspect-profiling-asmr-noir-jazz-520237.mp3",
   "musica/konstantinpazuzustudio-unsolved-mystery-asmr-noir-jazz-520239.mp3",
+  "musica/luis_humanoide-western-theme-162884.mp3",
   "musica/madstock-noir-340140.mp3",
   "musica/markmusicstudio-noir-piano-club-572124.mp3",
   "musica/noirtales-film-noir-566510.mp3",
+  "musica/octosound-cobra-169065.mp3",
   "musica/positive_sound-spaghetti-western-491538.mp3",
+  "musica/remstunes-spy-surf-392415.mp3",
   "musica/sub_clair-funk-instrumental-610619.mp3",
+  "musica/vlad_annenkov-tarantino-blues-quotmidnight-mirage-471931.mp3",
   "sons/papel.mp3"
  ],
- "faltando": [
-  "musica/abydos_music-energetic-garage-rock-171763.mp3",
-  "musica/luis_humanoide-western-theme-162884.mp3",
-  "musica/octosound-cobra-169065.mp3",
-  "musica/remstunes-spy-surf-392415.mp3",
-  "musica/vlad_annenkov-tarantino-blues-quotmidnight-mirage-471931.mp3"
- ]
+ "faltando": []
 }

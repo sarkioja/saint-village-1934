@@ -122,6 +122,26 @@ for (const t of alvos) {
 for (const t of alvos) {
   for (const m of t.matchAll(/['"]([a-z]+\/)['"]/g)) midia.add(m[1] + '*');
 }
+
+// Caminho montado por concatenação com um contador, que foi como o v3 passou a
+// declarar o conjunto de fundos: `[1..8].map(n => 'fundos/noir'+n+'.jpg')`.
+//
+// Antes isto entrava no inventário como o prefixo solto `fundos/noir`, um
+// arquivo que não existe e que ninguém ia procurar — o inventário dizia que
+// estava tudo certo enquanto oito fundos faltavam. Agora a faixa é expandida e
+// cada arquivo é cobrado pelo nome.
+for (const t of alvos) {
+  for (const m of t.matchAll(
+    /\[([\d,\s]+)\]\s*\.map\(\s*\w+\s*=>\s*['"]([a-zA-Z0-9_/-]+)['"]\s*\+\s*\w+\s*\+\s*['"](\.[a-z0-9]+)['"]/g,
+  )) {
+    const numeros = m[1].split(',').map((x) => x.trim()).filter(Boolean);
+    for (const n of numeros) midia.add(`${m[2]}${n}${m[3]}`);
+  }
+}
+// O prefixo solto deixa de poluir o inventário depois de expandido.
+for (const r of [...midia]) {
+  if (/^[a-z]+\/[a-z]+$/.test(r) && [...midia].some((o) => o !== r && o.startsWith(r))) midia.delete(r);
+}
 writeFileSync('source/midia-externa.json', JSON.stringify([...midia].sort(), null, 1));
 
 console.log('origem        :', origem, `(${(raw.length / 1048576).toFixed(1)} MB)`);

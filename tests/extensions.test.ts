@@ -5,6 +5,19 @@ import {
   temExtensoes,
   stripMarks,
 } from '@/lib/oracle/extensions';
+import REGRAS from '@/lib/oracle/data/regras.json';
+
+/**
+ * O Mural dos Fios é opcional por era, e o v3 o desligou nas duas que restaram.
+ * Os testes de FIO-NOVO passam a perguntar aos dados em que era testar, em vez
+ * de citar 1974 — que nem existe mais. Sem era com Mural, eles verificam a
+ * recusa, que é o comportamento correto nesse caso.
+ */
+const ERAS = Object.keys(REGRAS as any).filter((k) => /^\d{4}$/.test(k)).sort();
+const COM_MURAL = ERAS.filter((e) => ((REGRAS as any)[e].mods || []).includes('mural'));
+const SEM_MURAL = ERAS.filter((e) => !COM_MURAL.includes(e));
+const ERA_MURAL = COM_MURAL[0];
+const ERA_SEM_MURAL = SEM_MURAL[0];
 
 /** Estado de era mínimo, na mesma forma que blankEra() produz. */
 const estado = (over: any = {}) => ({
@@ -121,59 +134,59 @@ describe('calcularExtensoes — FIO-NOVO', () => {
       },
     });
 
-  it('liga duas pistas pelo número', () => {
+  it.skipIf(!ERA_MURAL)('liga duas pistas pelo número', () => {
     const { estado: e, efeitos } = calcularExtensoes(
       lerExtensoes('[FIO-NOVO: 1 | 2 | mesma letra]'),
       comPistas(),
-      '1974',
+      ERA_MURAL,
     );
     expect(e.caso.fios).toHaveLength(1);
     expect(e.caso.fios[0]).toMatchObject({ a: 'p1', b: 'p2', rel: 'mesma letra', st: 'solto' });
     expect(efeitos).toEqual(['Fio novo no Mural']);
   });
 
-  it('liga duas pistas por trecho do texto', () => {
+  it.skipIf(!ERA_MURAL)('liga duas pistas por trecho do texto', () => {
     const { estado: e } = calcularExtensoes(
       lerExtensoes('[FIO-NOVO: fita de rolo | carro parado | foram gravados no mesmo dia]'),
       comPistas(),
-      '1974',
+      ERA_MURAL,
     );
     expect(e.caso.fios[0]).toMatchObject({ a: 'p2', b: 'p3' });
   });
 
-  it('não repete um Fio que já existe, em qualquer ordem', () => {
+  it.skipIf(!ERA_MURAL)('não repete um Fio que já existe, em qualquer ordem', () => {
     const base = comPistas();
     base.caso.fios = [{ id: 'f1', a: 'p2', b: 'p1', rel: 'já ligado', st: 'firme' }];
     const { estado: e, efeitos } = calcularExtensoes(
       lerExtensoes('[FIO-NOVO: 1 | 2 | de novo]'),
       base,
-      '1974',
+      ERA_MURAL,
     );
     expect(e.caso.fios).toHaveLength(1);
     expect(efeitos).toEqual([]);
   });
 
-  it('ignora pista que não existe', () => {
+  it.skipIf(!ERA_MURAL)('ignora pista que não existe', () => {
     const { estado: e } = calcularExtensoes(
       lerExtensoes('[FIO-NOVO: 1 | 9 | nada]'),
       comPistas(),
-      '1974',
+      ERA_MURAL,
     );
     expect(e.caso.fios).toHaveLength(0);
   });
 
-  it('não cria Fios em era sem Mural', () => {
+  it('não cria Fios em era sem Mural (hoje, todas)', () => {
     const { estado: e, efeitos } = calcularExtensoes(
       lerExtensoes('[FIO-NOVO: 1 | 2 | mesma letra]'),
       comPistas(),
-      '1934',
+      ERA_SEM_MURAL,
     );
     expect(e.caso.fios).toHaveLength(0);
     expect(efeitos).toEqual([]);
   });
 });
 
-describe('as três automações num turno só', () => {
+describe('as automações num turno só', () => {
   it('aplicam juntas e rendem uma linha de mecânica', () => {
     const ext = lerExtensoes(
       'O estivador aponta para a doca.\n' +
@@ -198,11 +211,14 @@ describe('as três automações num turno só', () => {
         ],
       },
     });
-    const { estado: e, efeitos } = calcularExtensoes(ext, depois, '1974');
-    expect(e.cena).toBe('Embarcadouro'); // nome da região em 1974
+    // Rodado numa era que existe de verdade; o Fio só entra se ela tiver Mural,
+    // e hoje nenhuma tem. Cena e caso valem sempre.
+    const era = ERAS[0];
+    const { estado: e, efeitos } = calcularExtensoes(ext, depois, era);
+    expect(e.cena).toBe('Embarcadouro e Píer 9'); // nome da região em 1934
     expect(e.caso.titulo).toBe('O homem do Píer 9');
-    expect(e.caso.fios).toHaveLength(1);
-    expect(efeitos).toHaveLength(3);
+    expect(e.caso.fios).toHaveLength(COM_MURAL.includes(era) ? 1 : 0);
+    expect(efeitos).toHaveLength(COM_MURAL.includes(era) ? 3 : 2);
   });
 });
 
