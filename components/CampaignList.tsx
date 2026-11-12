@@ -55,7 +55,7 @@ export default function CampaignList() {
     try {
       const res = await fetch('/api/campaigns');
       if (res.status === 401) {
-        router.push('/entrar');
+        router.push('/');
         return;
       }
       const j = await res.json();

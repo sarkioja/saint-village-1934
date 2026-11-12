@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getSession();
-  if (!session) redirect('/entrar');
+  if (!session) redirect('/');
 
   const store = await getStore();
   const c = await store.getCampaign(id);

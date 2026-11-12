@@ -285,6 +285,116 @@ const NARRATE = `
   }
 `;
 
+// --------------------------------------------------- login num fluxo só
+//
+// A tela continua sendo a do designer (nome + PIN de 4 números); o que muda é
+// para onde ela fala. Com PIN, a conta é real: Postgres, sessão em cookie e o
+// arquivo sincronizado entre dispositivos. Sem PIN, cai exatamente no
+// comportamento do artifact — perfil no navegador e nada sai dali. É a mesma
+// distinção que a interface já anunciava entre "Salvo neste navegador" e
+// "Salvo na nuvem"; agora ela é verdade.
+const LOGIN = `
+  async doLogin(nomeIn,pinIn){
+    const nome=String(nomeIn||'').trim().replace(/\\s+/g,' '), slug=svSlug(nome), pin=String(pinIn||'').trim();
+    if(nome.length<2||!slug){ this.setState({loginErr:'Escreva um nome com pelo menos 2 letras.'}); return; }
+    if(pin&&!/^\\d{4}$/.test(pin)){ this.setState({loginErr:'O PIN tem 4 números (ou deixe em branco).'}); return; }
+
+    // Sem PIN nao ha' conta a abrir: segue o caminho local do artifact.
+    if(!pin){ this.entrarLocal(nome,slug,''); return; }
+
+    this.setState({busy:true});
+    try{
+      const res=await fetch('/api/perfil',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({nome,pin})});
+      const j=await res.json().catch(()=>({}));
+
+      if(res.status===503){ this.entrarLocal(nome,slug,''); this.setState({busy:false}); return; }
+      if(!res.ok){
+        // 400 'local' so' acontece sem PIN, que ja' foi tratado acima.
+        this.setState({busy:false,loginErr:j.message||j.error||'Não foi possível entrar.'});
+        return;
+      }
+
+      const perfil={slug:j.perfil.slug,nome:j.perfil.nome,pinHash:''};
+      SVP.saveList([perfil,...SVP.list().filter(x=>x.slug!==perfil.slug)].slice(0,12));
+      SVP.setCur(perfil);
+
+      // O arquivo da conta manda sobre o que estiver neste navegador: quem
+      // abre a cronica noutro aparelho tem de ver o progresso dela.
+      let daNuvem=null, rev=0;
+      try{ const r=await fetch('/api/arquivo'); if(r.ok){ const a=await r.json(); daNuvem=a.state; rev=a.rev||0; } }catch(e){}
+      this.__rev=rev; this.__naNuvem=true;
+
+      const local=(()=>{ try{ return JSON.parse(localStorage.getItem(lsKey())||'null'); }catch(e){ return null; } })();
+      const base=daNuvem&&daNuvem.eras?daNuvem:(local||{});
+      if(daNuvem&&daNuvem.eras){ try{ localStorage.setItem(lsKey(),JSON.stringify(daNuvem)); }catch(e){} }
+
+      const st=Object.assign({era:null,tab:'cronica',eras:{},mapZ:undefined,mapX:undefined,mapY:undefined},load()||base);
+      this.setState({...st,perfil,busy:false,loginErr:'',loginNome:'',loginPin:'',nuvem:'Salvo na nuvem'},
+        ()=>{ this.applyTheme&&this.applyTheme(this.state.era); this.save(); });
+    }catch(err){
+      // Rede fora: entra local em vez de barrar o jogo.
+      this.entrarLocal(nome,slug,'');
+      this.setState({busy:false});
+    }
+  }
+
+  /** Caminho do artifact: perfil neste navegador, sem servidor nenhum. */
+  entrarLocal(nome,slug,pinHash){
+    this.__naNuvem=false;
+    const list=SVP.list(), known=list.find(x=>x.slug===slug);
+    const perfil={slug,nome:known?known.nome:nome,pinHash:pinHash||''};
+    SVP.saveList([perfil,...list.filter(x=>x.slug!==slug)].slice(0,12)); SVP.setCur(perfil);
+    try{ const key=LS0+'::'+slug, legacy=localStorage.getItem(LS0); if(!localStorage.getItem(key)&&legacy&&!list.length) localStorage.setItem(key,legacy); }catch(e){}
+    const st=Object.assign({era:null,tab:'cronica',eras:{},mapZ:undefined,mapX:undefined,mapY:undefined},load()||{});
+    this.setState({...st,perfil,loginErr:'',loginNome:'',loginPin:'',nuvem:'Salvo neste navegador'},
+      ()=>{ this.applyTheme&&this.applyTheme(this.state.era); this.save(); });
+  }
+
+  /**
+   * Grava o arquivo na conta, agrupado: o jogo chama save() a cada setState, e
+   * uma requisicao por tecla digitada seria absurdo. A gravacao local ja'
+   * aconteceu antes desta chamada — isto e' a copia duravel.
+   */
+  gravarArquivo(snap){
+    if(!this.__naNuvem) return;
+    this.__pend=snap;
+    clearTimeout(this.__gt);
+    this.__gt=setTimeout(async()=>{
+      if(this.__gInFlight||!this.__pend) return;
+      const corpo=this.__pend; this.__pend=null; this.__gInFlight=true;
+      try{
+        const res=await fetch('/api/arquivo',{method:'PUT',headers:{'content-type':'application/json'},
+          body:JSON.stringify({...corpo,rev:this.__rev||0})});
+        if(res.status===409){
+          // Outra aba ou outro aparelho gravou depois. Parar de escrever e'
+          // melhor que passar por cima do progresso de la'.
+          const j=await res.json().catch(()=>({}));
+          this.__rev=j.rev||this.__rev; this.__naNuvem=false;
+          this.setState({nuvem:'Aberto noutro lugar — recarregue'});
+        } else if(res.ok){
+          const j=await res.json().catch(()=>({}));
+          if(typeof j.rev==='number') this.__rev=j.rev;
+          this.setState({nuvem:'Salvo na nuvem'});
+        }
+      }catch(e){
+        // Rede fora: devolve para a fila, o save local ja' garantiu a jogada.
+        if(!this.__pend) this.__pend=corpo;
+      }
+      this.__gInFlight=false;
+      if(this.__pend) this.gravarArquivo(this.__pend);
+    },700);
+  }
+
+  doLogout(){
+    clearTimeout(this.__cs); clearTimeout(this.__gt); this.__naNuvem=false; this.__pend=null;
+    SVP.setCur(null); this.__lastCloud=null; this.__rev=0;
+    fetch('/api/auth/logout',{method:'POST'}).catch(()=>{});
+    this.setState({perfil:null,era:null,eras:{},loginNome:'',loginPin:'',loginErr:'',nuvem:''},
+      ()=>this.applyTheme&&this.applyTheme(null));
+  }
+`;
+
 const RENDER = `
   /** DCLogic chamava renderVals() por fora; aqui a própria classe renderiza. */
   render(){
@@ -311,11 +421,30 @@ const SUBS_HEAD = [
     // no lugar: quem esta' numa conta ganha a copia durável e o sync entre
     // dispositivos; quem nao esta' continua com o comportamento do artifact.
     "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz,perfil}=this.state; if(!perfil) return; try{ localStorage.setItem(lsKey(), JSON.stringify({era,tab,eras,mapZ,mapX,mapY,mapFz,savedAt:Date.now()})); }catch(e){} this.cloudSync(); }",
-    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz,perfil}=this.state; if(!perfil) return; const snap={era,tab,eras,mapZ,mapX,mapY,mapFz,savedAt:Date.now()}; try{ localStorage.setItem(lsKey(), JSON.stringify(snap)); }catch(e){} if(this.props.store) this.props.store.write(snap); this.cloudSync(); }",
+    "save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz,perfil}=this.state; if(!perfil) return; const snap={era,tab,eras,mapZ,mapX,mapY,mapFz,savedAt:Date.now()}; try{ localStorage.setItem(lsKey(), JSON.stringify(snap)); }catch(e){} this.gravarArquivo(snap); this.cloudSync(); }",
   ],
 ];
 
+/**
+ * Remove um método inteiro do texto da classe, pelo nome.
+ *
+ * Usado para tirar do caminho os originais que são substituídos por uma versão
+ * portada (doLogin, doLogout). Em JS a definição posterior venceria a anterior,
+ * mas deixar as duas no arquivo gerado é convite a ler a errada — e o
+ * invariante de métodos passaria a contar fantasma.
+ */
+function removerMetodo(txt, nome) {
+  const linhas = txt.split('\n');
+  const inicio = linhas.findIndex((l) => new RegExp(`^ {2}(async )?${nome}\\(`).test(l));
+  if (inicio < 0) throw new Error(`método a remover não encontrado: ${nome}`);
+  let fim = inicio + 1;
+  while (fim < linhas.length && !/^ {2}(async )?[a-zA-Z_][\w]*\s*[(=]/.test(linhas[fim])) fim++;
+  linhas.splice(inicio, fim - inicio);
+  return linhas.join('\n');
+}
+
 let head = desglobalizar(HEAD);
+for (const nome of ['doLogin', 'doLogout']) head = removerMetodo(head, nome);
 for (const [de, para] of SUBS_HEAD) {
   if (!head.includes(de)) throw new Error('substituição não encontrada no HEAD: ' + de.slice(0, 60));
   head = head.split(de).join(para);
@@ -371,6 +500,8 @@ const out =
   head +
   '\n' +
   NARRATE +
+  '\n' +
+  LOGIN +
   '\n' +
   tail.replace(/\}\s*$/, '') +
   RENDER +

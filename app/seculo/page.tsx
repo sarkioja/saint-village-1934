@@ -20,7 +20,7 @@ const ERAS = ['1934', '1946', '1974', '1994', '1999'];
  */
 export default async function Page() {
   const session = await getSession();
-  if (!session) redirect('/entrar');
+  if (!session) redirect('/');
 
   const store = await getStore();
   const campaigns = await store.listCampaigns(session.userId);

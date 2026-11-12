@@ -286,7 +286,7 @@ export default class OracleLogic extends React.Component<Props, any> {
     const el=this.logRef.current; const a=this.cur(ps), b=this.cur();
     if(el && (ps.busy!==this.state.busy || (a&&b&&a.log.length!==b.log.length) || ps.tab!==this.state.tab)) el.scrollTop=el.scrollHeight;
   }
-  save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz,perfil}=this.state; if(!perfil) return; const snap={era,tab,eras,mapZ,mapX,mapY,mapFz,savedAt:Date.now()}; try{ localStorage.setItem(lsKey(), JSON.stringify(snap)); }catch(e){} if(this.props.store) this.props.store.write(snap); this.cloudSync(); }
+  save(){ const {era,tab,eras,mapZ,mapX,mapY,mapFz,perfil}=this.state; if(!perfil) return; const snap={era,tab,eras,mapZ,mapX,mapY,mapFz,savedAt:Date.now()}; try{ localStorage.setItem(lsKey(), JSON.stringify(snap)); }catch(e){} this.gravarArquivo(snap); this.cloudSync(); }
   cloudSync(){ clearTimeout(this.__cs); this.__cs=setTimeout(async()=>{ const db=this.__db, uid=this.__uid, p=this.state.perfil; if(!db||!uid||!p) return;
       let data=null; try{ data=localStorage.getItem(lsKey()); }catch(e){} if(!data||data===this.__lastCloud) return;
       if(data.length>230000){ try{ const o=JSON.parse(data); Object.values(o.eras||{}).forEach(e=>{ if(e&&Array.isArray(e.log)) e.log=e.log.slice(-120); }); data=JSON.stringify(o); }catch(e){} }
@@ -294,18 +294,6 @@ export default class OracleLogic extends React.Component<Props, any> {
       catch(e){ this.setState({nuvem:'Salvo neste navegador'}); } },1500); }
   async cloudGet(slug){ const db=this.__db, uid=this.__uid; if(!db||!uid) return null; try{ const sn=await db.collection('data/users/'+uid).doc('perfil-'+slug).get(); return sn.exists?sn.data():null; }catch(e){ return null; } }
   async cloudList(){ const db=this.__db, uid=this.__uid; if(!db||!uid) return; try{ const q=await db.collection('data/users/'+uid).get(); const L=q.docs.filter(d=>d.id.startsWith('perfil-')).map(d=>({slug:d.id.slice(7),nome:(d.data()||{}).nome||d.id.slice(7),pinHash:(d.data()||{}).pin||''})); this.setState({perfisNuvem:L}); }catch(e){} }
-  async doLogin(nomeIn,pinIn){ const nome=String(nomeIn||'').trim().replace(/\s+/g,' '), slug=svSlug(nome), pin=String(pinIn||'').trim();
-      if(nome.length<2||!slug){ this.setState({loginErr:'Escreva um nome com pelo menos 2 letras.'}); return; }
-      if(pin&&!/^\d{4}$/.test(pin)){ this.setState({loginErr:'O PIN tem 4 números (ou deixe em branco).'}); return; }
-      const list=SVP.list(), cloud=await this.cloudGet(slug), known=list.find(x=>x.slug===slug)||(cloud?{slug,nome:cloud.nome||nome,pinHash:cloud.pin||''}:null);
-      const h=pin?await svHash(slug+':'+pin):'';
-      if(known&&known.pinHash&&known.pinHash!==h){ this.setState({loginErr:pin?'PIN não confere.':'Este investigador tem PIN. Digite os 4 números.'}); return; }
-      const perfil={slug,nome:known?known.nome:nome,pinHash:known&&known.pinHash?known.pinHash:h};
-      SVP.saveList([perfil,...list.filter(x=>x.slug!==slug)].slice(0,12)); SVP.setCur(perfil);
-      try{ const key=LS0+'::'+slug, legacy=localStorage.getItem(LS0); if(!localStorage.getItem(key)&&legacy&&!list.length) localStorage.setItem(key,legacy); }catch(e){}
-      try{ const loc=JSON.parse(localStorage.getItem(LS0+'::'+slug)||'null'); if(cloud&&cloud.save){ const cs=JSON.parse(cloud.save); if(!loc||(cs.savedAt||0)>(loc.savedAt||0)) localStorage.setItem(LS0+'::'+slug,cloud.save); } }catch(e){}
-      const st=Object.assign({era:null,tab:'cronica',eras:{},mapZ:undefined,mapX:undefined,mapY:undefined},load()||{});
-      this.setState({...st,perfil,loginErr:'',loginNome:'',loginPin:'',nuvem:this.__db?'Salvo na nuvem':'Salvo neste navegador'},()=>{ this.applyTheme&&this.applyTheme(this.state.era); this.save(); }); }
   async exportArquivo(){ const p=this.state.perfil; if(!p) return; let data=''; try{ data=localStorage.getItem(lsKey())||''; }catch(e){} if(!data){ svToast('Nada salvo ainda.'); return; }
       const pack=JSON.stringify({tipo:'saint-village-arquivo',v:1,nome:p.nome,slug:p.slug,pin:p.pinHash||'',save:JSON.parse(data),em:new Date().toISOString()});
       const fn='saint-village-'+p.slug+'.json';
@@ -316,7 +304,6 @@ export default class OracleLogic extends React.Component<Props, any> {
         const save={...o.save,savedAt:Date.now()}; localStorage.setItem(LS0+'::'+o.slug,JSON.stringify(save));
         svToast('Arquivo de '+perfil.nome+' importado. Entre com esse nome.'); this.setState({loginNome:perfil.nome,loginPin:'',loginErr:''}); if(this.state.perfil&&this.state.perfil.slug===o.slug){ this.setState(Object.assign({},load()||{})); this.cloudSync(); }
       }catch(e){ svToast('Este arquivo não é um save do Saint Village.'); } }; rd.readAsText(f); }
-  doLogout(){ clearTimeout(this.__cs); SVP.setCur(null); this.__lastCloud=null; this.setState({perfil:null,era:null,eras:{},loginNome:'',loginPin:'',loginErr:''},()=>this.applyTheme&&this.applyTheme(null)); }
   cur(s=this.state){ return s.era && s.eras ? s.eras[s.era] : null; }
   upd(fn){ this.setState(s=>{ const eras={...s.eras}; eras[s.era]=fn({...eras[s.era]}); return {eras}; }, ()=>this.save()); }
   setChar(patch){ this.upd(e=>({...e,char:{...e.char,...(typeof patch==='function'?patch(e.char):patch)}})); }
@@ -478,6 +465,107 @@ export default class OracleLogic extends React.Component<Props, any> {
       const j=await res.json();
       if(j && j.resumo) this.setCaso({resumo:String(j.resumo), resumoEm:narrativas});
     }catch(e){ /* resumo e' melhoria, nao requisito: falhar aqui nao atrapalha a cena */ }
+  }
+
+
+  async doLogin(nomeIn,pinIn){
+    const nome=String(nomeIn||'').trim().replace(/\s+/g,' '), slug=svSlug(nome), pin=String(pinIn||'').trim();
+    if(nome.length<2||!slug){ this.setState({loginErr:'Escreva um nome com pelo menos 2 letras.'}); return; }
+    if(pin&&!/^\d{4}$/.test(pin)){ this.setState({loginErr:'O PIN tem 4 números (ou deixe em branco).'}); return; }
+
+    // Sem PIN nao ha' conta a abrir: segue o caminho local do artifact.
+    if(!pin){ this.entrarLocal(nome,slug,''); return; }
+
+    this.setState({busy:true});
+    try{
+      const res=await fetch('/api/perfil',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({nome,pin})});
+      const j=await res.json().catch(()=>({}));
+
+      if(res.status===503){ this.entrarLocal(nome,slug,''); this.setState({busy:false}); return; }
+      if(!res.ok){
+        // 400 'local' so' acontece sem PIN, que ja' foi tratado acima.
+        this.setState({busy:false,loginErr:j.message||j.error||'Não foi possível entrar.'});
+        return;
+      }
+
+      const perfil={slug:j.perfil.slug,nome:j.perfil.nome,pinHash:''};
+      SVP.saveList([perfil,...SVP.list().filter(x=>x.slug!==perfil.slug)].slice(0,12));
+      SVP.setCur(perfil);
+
+      // O arquivo da conta manda sobre o que estiver neste navegador: quem
+      // abre a cronica noutro aparelho tem de ver o progresso dela.
+      let daNuvem=null, rev=0;
+      try{ const r=await fetch('/api/arquivo'); if(r.ok){ const a=await r.json(); daNuvem=a.state; rev=a.rev||0; } }catch(e){}
+      this.__rev=rev; this.__naNuvem=true;
+
+      const local=(()=>{ try{ return JSON.parse(localStorage.getItem(lsKey())||'null'); }catch(e){ return null; } })();
+      const base=daNuvem&&daNuvem.eras?daNuvem:(local||{});
+      if(daNuvem&&daNuvem.eras){ try{ localStorage.setItem(lsKey(),JSON.stringify(daNuvem)); }catch(e){} }
+
+      const st=Object.assign({era:null,tab:'cronica',eras:{},mapZ:undefined,mapX:undefined,mapY:undefined},load()||base);
+      this.setState({...st,perfil,busy:false,loginErr:'',loginNome:'',loginPin:'',nuvem:'Salvo na nuvem'},
+        ()=>{ this.applyTheme&&this.applyTheme(this.state.era); this.save(); });
+    }catch(err){
+      // Rede fora: entra local em vez de barrar o jogo.
+      this.entrarLocal(nome,slug,'');
+      this.setState({busy:false});
+    }
+  }
+
+  /** Caminho do artifact: perfil neste navegador, sem servidor nenhum. */
+  entrarLocal(nome,slug,pinHash){
+    this.__naNuvem=false;
+    const list=SVP.list(), known=list.find(x=>x.slug===slug);
+    const perfil={slug,nome:known?known.nome:nome,pinHash:pinHash||''};
+    SVP.saveList([perfil,...list.filter(x=>x.slug!==slug)].slice(0,12)); SVP.setCur(perfil);
+    try{ const key=LS0+'::'+slug, legacy=localStorage.getItem(LS0); if(!localStorage.getItem(key)&&legacy&&!list.length) localStorage.setItem(key,legacy); }catch(e){}
+    const st=Object.assign({era:null,tab:'cronica',eras:{},mapZ:undefined,mapX:undefined,mapY:undefined},load()||{});
+    this.setState({...st,perfil,loginErr:'',loginNome:'',loginPin:'',nuvem:'Salvo neste navegador'},
+      ()=>{ this.applyTheme&&this.applyTheme(this.state.era); this.save(); });
+  }
+
+  /**
+   * Grava o arquivo na conta, agrupado: o jogo chama save() a cada setState, e
+   * uma requisicao por tecla digitada seria absurdo. A gravacao local ja'
+   * aconteceu antes desta chamada — isto e' a copia duravel.
+   */
+  gravarArquivo(snap){
+    if(!this.__naNuvem) return;
+    this.__pend=snap;
+    clearTimeout(this.__gt);
+    this.__gt=setTimeout(async()=>{
+      if(this.__gInFlight||!this.__pend) return;
+      const corpo=this.__pend; this.__pend=null; this.__gInFlight=true;
+      try{
+        const res=await fetch('/api/arquivo',{method:'PUT',headers:{'content-type':'application/json'},
+          body:JSON.stringify({...corpo,rev:this.__rev||0})});
+        if(res.status===409){
+          // Outra aba ou outro aparelho gravou depois. Parar de escrever e'
+          // melhor que passar por cima do progresso de la'.
+          const j=await res.json().catch(()=>({}));
+          this.__rev=j.rev||this.__rev; this.__naNuvem=false;
+          this.setState({nuvem:'Aberto noutro lugar — recarregue'});
+        } else if(res.ok){
+          const j=await res.json().catch(()=>({}));
+          if(typeof j.rev==='number') this.__rev=j.rev;
+          this.setState({nuvem:'Salvo na nuvem'});
+        }
+      }catch(e){
+        // Rede fora: devolve para a fila, o save local ja' garantiu a jogada.
+        if(!this.__pend) this.__pend=corpo;
+      }
+      this.__gInFlight=false;
+      if(this.__pend) this.gravarArquivo(this.__pend);
+    },700);
+  }
+
+  doLogout(){
+    clearTimeout(this.__cs); clearTimeout(this.__gt); this.__naNuvem=false; this.__pend=null;
+    SVP.setCur(null); this.__lastCloud=null; this.__rev=0;
+    fetch('/api/auth/logout',{method:'POST'}).catch(()=>{});
+    this.setState({perfil:null,era:null,eras:{},loginNome:'',loginPin:'',loginErr:'',nuvem:''},
+      ()=>this.applyTheme&&this.applyTheme(null));
   }
 
   ingest(text, opts){

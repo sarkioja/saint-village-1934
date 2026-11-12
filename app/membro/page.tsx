@@ -12,11 +12,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   const session = await getSession();
-  if (!session) redirect('/entrar');
+  if (!session) redirect('/');
 
   const store = await getStore();
   const user = await store.getUser(session.userId);
-  if (!user) redirect('/entrar');
+  if (!user) redirect('/');
 
   return (
     <Shell
